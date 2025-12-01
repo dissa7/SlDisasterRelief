@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="si">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ආපදා සහන මධ්‍යස්ථාන දත්ත පුවරුව</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Sinhala Font support is crucial, we assume a system font that supports Sinhala or rely on Inter's extended Unicode support for display -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fb;
+        }
+        .container-padding {
+            padding: 1rem;
+        }
+        @media (min-width: 640px) {
+            .container-padding {
+                padding: 1.5rem;
+            }
+        }
+        @media (min-width: 1024px) {
+            .container-padding {
+                padding: 2rem;
+            }
+        }
+        /* Custom scrollbar for better look */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #d1d5db;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #9ca3af;
+        }
+        .needs-list {
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        /* Custom class for the collapsing feature, to handle dynamic max-height */
+        .collapse-transition {
+            transition: max-height 0.5s ease-in-out;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+
+    <!-- Firebase Imports -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, addDoc, updateDoc, onSnapshot, setLogLevel, getDoc, query, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- FIREBASE CONFIGURATION using Canvas Environment Variables ---
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'disaster-relief-sl-public-v1';
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        let db;
+        let auth;
+        let userId = null;
+        let isAuthReady = false;
+
+        // Sri Lankan Districts list (English value, Sinhala display text)
+        const sriLankanDistricts = [
+            { value: 'Ampara', text: 'අම්පාර' },
+            { value: 'Anuradhapura', text: 'අනුරාධපුරය' },
+            { value: 'Badulla', text: 'බදුල්ල' },
+            { value: 'Batticaloa', text: 'මඩකලපුව' },
+            { value: 'Colombo', text: 'කොළඹ' },
+            { value: 'Galle', text: 'ගාල්ල' },
+            { value: 'Gampaha', text: 'ගම්පහ' },
+            { value: 'Hambantota', text: 'හම්බන්තොට' },
+            { value: 'Jaffna', text: 'යාපනය' },
+            { value: 'Kalutara', text: 'කළුතර' },
+            { value: 'Kandy', text: 'මහනුවර' },
+            { value: 'Kegalle', text: 'කෑගල්ල' },
+            { value: 'Kilinochchi', text: 'කිලිනොච්චිය' },
+            { value: 'Kurunegala', text: 'කුරුණෑගල' },
+            { value: 'Mannar', text: 'මන්නාරම' },
+            { value: 'Matale', text: 'මාතලේ' },
+            { value: 'Matara', text: 'මාතර' },
+            { value: 'Moneragala', text: 'මොනරාගල' },
+            { value: 'Mullaitivu', text: 'මුලතිව්' },
+            { value: 'Nuwara Eliya', text: 'නුවරඑළිය' },
+            { value: 'Polonnaruwa', text: 'පොළොන්නරුව' },
+            { value: 'Puttalam', text: 'පුත්තලම' },
+            { value: 'Ratnapura', text: 'රත්නපුරය' },
+            { value: 'Trincomalee', text: 'ත්‍රිකුණාමලය' },
+            { value: 'Vavuniya', text: 'වවුනියාව' }
+        ];
+
+
+        // Set log level for debugging
+        setLogLevel('Debug');
+
+        // --- Initialize Firebase and Authentication ---
+        const initFirebase = async () => {
+            try {
+                if (!firebaseConfig) {
+                     console.error("Firebase Configuration is missing or incomplete. Cannot initialize Firestore.");
+                     document.getElementById('loading-message').textContent = 'දෝෂය: Firebase වින්‍යාසය අස්ථානගත වී ඇත. කරුණාකර කේතය නිවැරදිව පූරණය වී ඇත්දැයි බලන්න.';
+                     return;
+                }
+                
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // Populate district options in forms and filter
+                populateDistrictFilters(); 
+
+                // --- 1. Perform initial sign-in attempt (using Custom Token or Anonymous Auth) ---
+                if (!auth.currentUser) {
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                        console.log("Signed in with custom token.");
+                    } else {
+                        // Sign in anonymously for access to the public data path.
+                        await signInAnonymously(auth); 
+                        console.log("Signed in anonymously.");
+                    }
+                }
+                
+                // --- 2. Set up Auth Listener and trigger data load once state is stable ---
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                    } else {
+                        // Fallback state if sign-in failed (should not happen with Anonymous Auth)
+                        userId = null; 
+                    }
+
+                    // Only perform initial data load when we are sure auth has settled
+                    if (!isAuthReady && db) {
+                        isAuthReady = true;
+                        const initialDistrict = document.getElementById('district-filter')?.value || 'All';
+                        loadShelters(initialDistrict);
+                        // Initialize instructions to be expanded by default
+                        initializeInstructionsHeight();
+                    }
+                    updateUserIdDisplay();
+                });
+                
+            } catch (error) {
+                console.error("Firebase initialization or sign-in failed:", error);
+                document.getElementById('loading-message').textContent = 'දෝෂය: Firebase ආරම්භ කිරීමේදී අසාර්ථක විය.';
+            }
+        };
+
+        const updateUserIdDisplay = () => {
+            const userIdDisplay = document.getElementById('user-id-display');
+            if (userIdDisplay) {
+                userIdDisplay.textContent = `පරිශීලක හැඳුනුම්පත: ${userId || 'පූරණය වෙමින්...'}`;
+            }
+        };
+
+
+        // --- Firestore Paths ---
+        const getSheltersCollection = () => {
+            if (!db) throw new Error("Firestore not initialized.");
+            // Public path for collaborative data
+            return collection(db, `artifacts/${appId}/public/data/shelters`); 
+        };
+
+        // --- District Population Function ---
+
+        const populateDistrictFilters = () => {
+            const filterElement = document.getElementById('district-filter');
+            const addFormElement = document.getElementById('add-district');
+            const editFormElement = document.getElementById('edit-district');
+            
+            // 1. Populate Filter Dropdown
+            if (filterElement) {
+                filterElement.innerHTML = `<option value="All">සියලුම දිස්ත්‍රික්ක</option>`;
+                sriLankanDistricts.forEach(district => {
+                    const option = document.createElement('option');
+                    option.value = district.value; // English value for DB query
+                    option.textContent = district.text; // Sinhala text for display
+                    filterElement.appendChild(option);
+                });
+            }
+
+            // 2. Populate Add Form Dropdown
+            if (addFormElement) {
+                 addFormElement.innerHTML = `<option value="">-- දිස්ත්‍රික්කය තෝරන්න --</option>`;
+                 sriLankanDistricts.forEach(district => {
+                    const option = document.createElement('option');
+                    option.value = district.value;
+                    option.textContent = district.text;
+                    addFormElement.appendChild(option);
+                });
+            }
+
+            // 3. Populate Edit Form Dropdown
+            if (editFormElement) {
+                 editFormElement.innerHTML = `<option value="">-- දිස්ත්‍රික්කය තෝරන්න --</option>`;
+                 sriLankanDistricts.forEach(district => {
+                    const option = document.createElement('option');
+                    option.value = district.value;
+                    option.textContent = district.text;
+                    editFormElement.appendChild(option);
+                });
+            }
+        }
+
+
+        // --- Data Loading and Rendering ---
+
+        const loadShelters = (districtFilter) => {
+            // Guard clause to ensure we only proceed if Firebase is initialized AND Auth is ready.
+            if (!isAuthReady || !db) return; 
+
+            const sheltersRef = getSheltersCollection();
+            let sheltersQuery;
+
+            if (districtFilter && districtFilter !== 'All') {
+                // Apply filter: only load shelters where the 'district' field matches the filter
+                sheltersQuery = query(sheltersRef, where('district', '==', districtFilter));
+            } else {
+                // Load all shelters
+                sheltersQuery = query(sheltersRef);
+            }
+
+            const loadingMessage = document.getElementById('loading-message');
+            const shelterTableBody = document.getElementById('shelter-table-body');
+            const noDataMessage = document.getElementById('no-data-message');
+
+            loadingMessage.classList.remove('hidden');
+            noDataMessage.classList.add('hidden');
+            shelterTableBody.innerHTML = '';
+
+            onSnapshot(sheltersQuery, (snapshot) => {
+                loadingMessage.classList.add('hidden');
+                
+                if (snapshot.empty) {
+                    const districtName = sriLankanDistricts.find(d => d.value === districtFilter)?.text || districtFilter;
+                    
+                    noDataMessage.textContent = districtFilter && districtFilter !== 'All'
+                        ? `${districtName} දිස්ත්‍රික්කය සඳහා සහන මධ්‍යස්ථාන හමු නොවේ.`
+                        : `සහන මධ්‍යස්ථාන වාර්තා හමු නොවේ. කරුණාකර නව මධ්‍යස්ථානයක් එක් කරන්න.`;
+                    noDataMessage.classList.remove('hidden');
+                    return;
+                }
+                
+                noDataMessage.classList.add('hidden');
+                shelterTableBody.innerHTML = '';
+                
+                snapshot.forEach((doc) => {
+                    const shelter = doc.data();
+                    shelter.id = doc.id;
+                    shelterTableBody.appendChild(createShelterRow(shelter));
+                });
+            }, (error) => {
+                console.error("Error fetching shelters:", error);
+                loadingMessage.textContent = 'දෝෂය: දත්ත ලබාගැනීම අසාර්ථක විය.';
+            });
+        };
+        
+        // --- Utility Functions ---
+
+        // Converts JS boolean to Sinhala text and color class
+        const getStatusText = (status) => {
+            if (status === true) return { text: 'ලැබී ඇත', color: 'text-green-600 bg-green-100' }; 
+            if (status === false) return { text: 'අවශ්‍යයි', color: 'text-red-600 bg-red-100' };
+            return { text: 'අවශ්‍යයි', color: 'text-red-600 bg-red-100' };
+        }
+        
+        // Function to get Sinhala District Name from English value
+        const getSinhalaDistrictName = (englishValue) => {
+            return sriLankanDistricts.find(d => d.value === englishValue)?.text || 'දත්ත නැත';
+        };
+
+        // --- DOM Creation Functions ---
+
+        const createShelterRow = (shelter) => {
+            const row = document.createElement('tr');
+            row.className = 'border-b hover:bg-gray-50';
+
+            // 1. District (Display Sinhala Name)
+            let cell0 = row.insertCell();
+            cell0.className = 'p-4 text-sm font-semibold text-blue-700';
+            cell0.innerHTML = getSinhalaDistrictName(shelter.district) || 'දත්ත නැත';
+
+            // 2. Address
+            let cell1 = row.insertCell();
+            cell1.className = 'p-4 font-semibold text-gray-700';
+            cell1.innerHTML = shelter.address || 'ලිපිනයක් සපයා නැත';
+
+            // 3. Contacts
+            let cell2 = row.insertCell();
+            cell2.className = 'p-4 text-gray-600';
+            const contacts = shelter.contacts || [];
+            if (contacts.length === 0) {
+                cell2.innerHTML = `<p class="text-sm italic text-gray-400">සම්බන්ධතා නැත</p>`; 
+            } else {
+                const contactsHtml = contacts.map(c => 
+                    `<p class="text-sm">${c.name || 'නමක් නැත'} - ${c.phone || 'අංකයක් නැත'}</p>`
+                ).join('');
+                cell2.innerHTML = contactsHtml;
+            }
+            
+            // 4. Population
+            let cell3 = row.insertCell();
+            cell3.className = 'p-4 text-center text-lg font-bold text-blue-600';
+            cell3.innerHTML = shelter.population || 0;
+            
+            // 5. Needs List (Clickable list)
+            const needsCell = row.insertCell();
+            needsCell.className = 'p-4';
+            
+            const needsContainer = document.createElement('div');
+            needsContainer.className = 'space-y-2 needs-list rounded-lg border p-2 bg-white';
+
+            (shelter.needs || []).forEach((need, index) => {
+                const needItem = document.createElement('div');
+                needItem.className = 'flex justify-between items-center text-sm p-1 rounded-md';
+                
+                const status = getStatusText(need.received);
+                
+                const toggleButton = document.createElement('button');
+                toggleButton.className = `px-2 py-1 text-xs font-medium rounded-full transition-colors ${status.color}`;
+                toggleButton.setAttribute('data-shelter-id', shelter.id);
+                toggleButton.setAttribute('data-need-index', index);
+                toggleButton.setAttribute('data-current-status', need.received);
+                toggleButton.title = 'තත්ත්වය වෙනස් කිරීමට ක්ලික් කරන්න';
+                toggleButton.textContent = status.text;
+
+                // Attach event listener directly
+                toggleButton.addEventListener('click', () => {
+                    const currentStatus = toggleButton.getAttribute('data-current-status') === 'true'; 
+                    toggleNeedReceived(shelter.id, index, !currentStatus);
+                });
+                
+                // Set inner content and append the button
+                needItem.innerHTML = `<span class="text-gray-800">${need.item}</span>`;
+                needItem.appendChild(toggleButton);
+
+                needsContainer.appendChild(needItem);
+            });
+
+            needsCell.appendChild(needsContainer);
+
+            // 6. Actions (New Column for Edit Button)
+            let cell6 = row.insertCell();
+            cell6.className = 'p-4 text-center';
+            
+            const editButton = document.createElement('button');
+            editButton.className = 'px-3 py-1 bg-yellow-500 text-white font-medium rounded-lg shadow-md hover:bg-yellow-600 transition text-sm';
+            editButton.textContent = 'සංස්කරණය කරන්න';
+            editButton.addEventListener('click', () => openEditShelterModal(shelter.id));
+            cell6.appendChild(editButton);
+
+
+            return row;
+        };
+
+        // --- Firestore Update Logic (Need Status Toggle) ---
+
+        const toggleNeedReceived = async (shelterId, needIndex, newStatus) => {
+            if (!db || !userId) {
+                console.error("Cannot update: Authentication not complete or missing user ID.");
+                showNotification('දෝෂය: තත්ත්වය යාවත්කාලීන කිරීමට අවසර අවශ්‍යයි.', 'red');
+                return;
+            }
+            
+            try {
+                const shelterRef = doc(getSheltersCollection(), shelterId);
+
+                const currentSnapshot = await getDoc(shelterRef);
+                
+                if (!currentSnapshot.exists()) {
+                    console.error("Shelter document not found:", shelterId);
+                    return;
+                }
+                
+                const shelterData = currentSnapshot.data();
+                if (!shelterData.needs || shelterData.needs.length <= needIndex) {
+                    console.error("Needs array or index invalid.");
+                    return;
+                }
+
+                // Safely update the specific item in the array
+                const updatedNeeds = [...shelterData.needs];
+                updatedNeeds[needIndex] = { ...updatedNeeds[needIndex], received: newStatus };
+
+                await updateDoc(shelterRef, { needs: updatedNeeds });
+                showNotification(`අවශ්‍යතාවේ තත්ත්වය '${getStatusText(newStatus).text}' ලෙස යාවත්කාලීන කරන ලදී.`, 'green');
+
+            } catch (error) {
+                console.error("Error updating need status:", error);
+                showNotification('දෝෂය: අවශ්‍යතාවේ තත්ත්වය යාවත්කාලීන කිරීම අසාර්ථක විය.', 'red');
+            }
+        };
+
+        // --- Dynamic Form Field Management (Used by both Add and Edit Modals) ---
+
+        const addContactField = (containerId = 'contact-container', name = '', phone = '') => {
+            const container = document.getElementById(containerId);
+            const div = document.createElement('div');
+            div.className = 'flex space-x-2 mt-2 contact-input-group';
+            div.innerHTML = `
+                <input type="text" placeholder="නම" name="contactName" value="${name}" class="w-2/5 p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-sm">
+                <input type="tel" placeholder="දුරකථන අංකය" name="contactPhone" value="${phone}" class="w-2/5 p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-sm">
+                <button type="button" onclick="this.parentNode.remove()" class="w-1/5 p-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition text-sm font-medium">ඉවත් කරන්න</button>
+            `;
+            container.appendChild(div);
+        };
+        
+        const addNeedField = (containerId = 'needs-container', item = '') => {
+            const container = document.getElementById(containerId);
+            const div = document.createElement('div');
+            // This is for the ADD modal, where all added needs are 'unreceived' initially.
+            div.className = 'flex space-x-2 mt-2 need-input-group'; 
+            div.innerHTML = `
+                <input type="text" placeholder="අවශ්‍ය ද්‍රව්‍යයේ නම (උදා: සහල්, වතුර බෝතල්)" name="needItem" value="${item}" class="w-4/5 p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-sm">
+                <button type="button" onclick="this.parentNode.remove()" class="w-1/5 p-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition text-sm font-medium">ඉවත් කරන්න</button>
+            `;
+            container.appendChild(div);
+        };
+
+        const addEditNeedField = (item = '', containerId = 'edit-needs-container') => {
+            const container = document.getElementById(containerId);
+            const div = document.createElement('div');
+             // This is for the EDIT modal, similar structure to add.
+            div.className = 'flex space-x-2 mt-2 need-input-group';
+            div.innerHTML = `
+                <input type="text" placeholder="අවශ්‍ය ද්‍රව්‍යයේ නම" name="editNeedItem" value="${item}" class="w-4/5 p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-sm">
+                <button type="button" onclick="this.parentNode.remove()" class="w-1/5 p-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition text-sm font-medium">ඉවත් කරන්න</button>
+            `;
+            container.appendChild(div);
+        };
+
+
+        // --- Add Shelter Modal Logic ---
+
+        const openAddShelterModal = () => {
+            // Reset dynamic contact and need fields
+            document.getElementById('contact-container').innerHTML = '';
+            document.getElementById('needs-container').innerHTML = '';
+            addContactField('contact-container'); // Add one initial contact field
+            addNeedField('needs-container'); // Add one initial need field
+            document.getElementById('add-shelter-modal').classList.remove('hidden');
+        };
+
+        const closeAddShelterModal = () => {
+            document.getElementById('add-shelter-modal').classList.add('hidden');
+            document.getElementById('add-shelter-form').reset();
+        };
+
+        const handleSubmitShelter = async (event) => {
+            event.preventDefault();
+            
+            if (!db || !userId) {
+                showNotification('දෝෂය: පරිශීලකයාට අවසර නැත. නැවත උත්සාහ කරන්න.', 'red');
+                return;
+            }
+
+            const form = event.target;
+            const district = form.district.value.trim();
+            const address = form.address.value.trim();
+            const population = parseInt(form.population.value, 10);
+            
+            if (!district || !address || isNaN(population) || population <= 0) {
+                showNotification('කරුණාකර සියලුම අවශ්‍ය ක්ෂේත්‍ර නිවැරදිව පුරවන්න.', 'orange');
+                return;
+            }
+
+            // Collect contacts
+            const contactGroups = Array.from(document.getElementById('contact-container').querySelectorAll('.contact-input-group'));
+            const contacts = contactGroups.map(group => {
+                const name = group.querySelector('[name="contactName"]').value.trim();
+                const phone = group.querySelector('[name="contactPhone"]').value.trim();
+                return (name || phone) ? { name: name || 'නමක් නැත', phone: phone || 'අංකයක් නැත' } : null;
+            }).filter(c => c);
+
+
+            // Collect needs
+            const needInputs = Array.from(document.getElementById('needs-container').querySelectorAll('[name="needItem"]'));
+            const needs = needInputs.map(el => el.value.trim()).filter(v => v).map(item => ({
+                item: item,
+                received: false // Default to not received
+            }));
+
+            const newShelterData = {
+                district: district,
+                address: address,
+                population: population,
+                contacts: contacts,
+                needs: needs,
+                createdAt: new Date(),
+                createdBy: userId,
+            };
+
+            try {
+                await addDoc(getSheltersCollection(), newShelterData);
+                showNotification('නව සහන මධ්‍යස්ථානය සාර්ථකව එක් කරන ලදී!', 'green');
+                closeAddShelterModal();
+            } catch (error) {
+                console.error("Error adding document: ", error);
+                showNotification('දෝෂය: මධ්‍යස්ථානය එක් කිරීම අසාර්ථක විය.', 'red');
+            }
+        };
+
+        // --- Edit Shelter Modal Logic ---
+
+        const openEditShelterModal = async (shelterId) => {
+            if (!db || !userId) {
+                showNotification('දෝෂය: කරුණාකර නැවත පිවිසෙන්න.', 'red');
+                return;
+            }
+
+            const shelterRef = doc(getSheltersCollection(), shelterId);
+            const snapshot = await getDoc(shelterRef);
+
+            if (!snapshot.exists()) {
+                showNotification('දෝෂය: සංස්කරණය කිරීමට මධ්‍යස්ථානය සොයාගත නොහැක.', 'red');
+                return;
+            }
+
+            const shelter = snapshot.data();
+            const form = document.getElementById('edit-shelter-form');
+
+            // Set hidden ID
+            form.querySelector('#edit-shelter-id').value = shelterId;
+            
+            // Populate basic fields
+            form.querySelector('#edit-district').value = shelter.district || '';
+            form.querySelector('#edit-address').value = shelter.address || '';
+            form.querySelector('#edit-population').value = shelter.population || 1;
+
+            // Clear and populate contacts
+            const contactContainer = document.getElementById('edit-contact-container');
+            contactContainer.innerHTML = '';
+            (shelter.contacts || []).forEach(c => {
+                addContactField('edit-contact-container', c.name, c.phone);
+            });
+            // Ensure there is at least one contact field if the list was empty
+            if ((shelter.contacts || []).length === 0) {
+                 addContactField('edit-contact-container');
+            }
+
+            // Clear and populate needs (Wanted List - only unreceived)
+            const needsContainer = document.getElementById('edit-needs-container');
+            needsContainer.innerHTML = '';
+            // Only show *unreceived* needs in the edit form for easy addition/removal of current shortages
+            (shelter.needs || []).filter(n => !n.received).forEach(n => { 
+                addEditNeedField(n.item, 'edit-needs-container');
+            });
+            
+            // Add a blank field if no unreceived needs exist, allowing for new addition
+            if ((shelter.needs || []).filter(n => !n.received).length === 0) {
+                 addEditNeedField('', 'edit-needs-container');
+            }
+
+            document.getElementById('edit-shelter-modal').classList.remove('hidden');
+        };
+
+        const closeEditShelterModal = () => {
+            document.getElementById('edit-shelter-modal').classList.add('hidden');
+            document.getElementById('edit-shelter-form').reset();
+            document.getElementById('edit-contact-container').innerHTML = '';
+            document.getElementById('edit-needs-container').innerHTML = '';
+            
+            addContactField('edit-contact-container'); // Reset to one initial field
+            addEditNeedField('', 'edit-needs-container');
+        };
+
+
+        const handleSubmitEditShelter = async (event) => {
+            event.preventDefault();
+
+            if (!db || !userId) {
+                showNotification('දෝෂය: පරිශීලකයාට අවසර නැත. නැවත උත්සාහ කරන්න.', 'red');
+                return;
+            }
+
+            const form = event.target;
+            const shelterId = form.querySelector('#edit-shelter-id').value;
+            const district = form.querySelector('#edit-district').value.trim();
+            const address = form.querySelector('#edit-address').value.trim();
+            const population = parseInt(form.querySelector('#edit-population').value, 10);
+
+            if (!district || !address || isNaN(population) || population <= 0) {
+                showNotification('කරුණාකර සියලුම අවශ්‍ය ක්ෂේත්‍ර නිවැරදිව පුරවන්න.', 'orange');
+                return;
+            }
+
+            // 1. Collect UPDATED Contacts
+            const contactGroups = Array.from(document.getElementById('edit-contact-container').querySelectorAll('.contact-input-group'));
+            const updatedContacts = contactGroups.map(group => {
+                const name = group.querySelector('[name="contactName"]').value.trim();
+                const phone = group.querySelector('[name="contactPhone"]').value.trim();
+                return (name || phone) ? { name: name || 'නමක් නැත', phone: phone || 'අංකයක් නැත' } : null;
+            }).filter(c => c);
+            
+            // 2. Collect NEW/EDITED Needs (Wanted List)
+            const newNeedInputs = Array.from(document.getElementById('edit-needs-container').querySelectorAll('[name="editNeedItem"]'));
+            const newNeeds = newNeedInputs.map(el => el.value.trim()).filter(v => v);
+
+            try {
+                const shelterRef = doc(getSheltersCollection(), shelterId);
+                const currentSnapshot = await getDoc(shelterRef);
+                const currentData = currentSnapshot.data();
+                
+                // Keep the *received* needs as they are (true status).
+                const keptNeeds = (currentData.needs || []).filter(n => n.received);
+                
+                // Combine kept (received) needs with the new/edited needs (which are always marked as false/unreceived).
+                const combinedNeeds = [
+                    ...keptNeeds,
+                    ...newNeeds.map(item => ({ item: item, received: false }))
+                ];
+
+                const updatedData = {
+                    district: district,
+                    address: address,
+                    population: population,
+                    contacts: updatedContacts,
+                    needs: combinedNeeds,
+                    lastUpdated: new Date(),
+                    lastUpdatedBy: userId,
+                };
+
+                await updateDoc(shelterRef, updatedData);
+                showNotification('මධ්‍යස්ථාන තොරතුරු සාර්ථකව යාවත්කාලීන කරන ලදී!', 'green');
+                closeEditShelterModal();
+            } catch (error) {
+                console.error("Error updating document: ", error);
+                showNotification('දෝෂය: තොරතුරු යාවත්කාලීන කිරීම අසාර්ථක විය.', 'red');
+            }
+        };
+
+
+        // --- Notification / Modal Management ---
+
+        const showNotification = (message, type) => {
+            const notification = document.getElementById('notification-box');
+            notification.textContent = message;
+            notification.className = `fixed bottom-4 right-4 p-4 rounded-lg shadow-xl z-50 transition-all duration-300`;
+            
+            if (type === 'green') {
+                notification.classList.add('bg-green-500', 'text-white');
+            } else if (type === 'red') {
+                notification.classList.add('bg-red-500', 'text-white');
+            } else if (type === 'orange') {
+                notification.classList.add('bg-orange-500', 'text-white');
+            }
+
+            notification.classList.remove('opacity-0', 'hidden');
+
+            setTimeout(() => {
+                notification.classList.add('opacity-0', 'hidden');
+            }, 4000);
+        };
+        
+        // --- Instructions Toggle Feature ---
+        
+        const toggleInstructions = () => {
+            const content = document.getElementById('instructions-content');
+            const icon = document.getElementById('toggle-icon');
+
+            if (content.style.maxHeight === '0px' || content.style.maxHeight === '') {
+                // Expand: Set max-height to the scrollHeight to enable transition
+                content.style.maxHeight = content.scrollHeight + "px";
+                icon.classList.remove('rotate-180');
+            } else {
+                // Collapse: Set max-height to 0, but set height first to enable smooth transition back to 0
+                content.style.maxHeight = content.scrollHeight + "px"; // Necessary for transition when collapsing from dynamic height
+                // Force a reflow for transition to work when collapsing
+                content.offsetHeight; 
+                content.style.maxHeight = '0px';
+                icon.classList.add('rotate-180');
+            }
+        };
+
+        const initializeInstructionsHeight = () => {
+             const content = document.getElementById('instructions-content');
+             // Set initial state to expanded to show warning immediately
+             if (content) {
+                 content.style.maxHeight = content.scrollHeight + "px";
+                 // Ensure the icon is in the default (open) state
+                 document.getElementById('toggle-icon')?.classList.remove('rotate-180'); 
+             }
+        };
+        
+
+        // --- Event Listeners and Initial Load ---
+        
+        window.onload = () => {
+            // Setup Add Modal listeners
+            document.getElementById('add-shelter-btn').addEventListener('click', openAddShelterModal);
+            document.getElementById('close-add-modal-btn').addEventListener('click', closeAddShelterModal);
+            document.getElementById('cancel-add-modal-btn').addEventListener('click', closeAddShelterModal);
+            document.getElementById('add-shelter-form').addEventListener('submit', handleSubmitShelter);
+            
+            // Setup Edit Modal listeners
+            document.getElementById('close-edit-modal-btn').addEventListener('click', closeEditShelterModal);
+            document.getElementById('cancel-edit-modal-btn').addEventListener('click', closeEditShelterModal);
+            document.getElementById('edit-shelter-form').addEventListener('submit', handleSubmitEditShelter);
+            
+            // Setup dynamic field addition for Add Modal
+            document.getElementById('add-contact-btn').addEventListener('click', () => addContactField('contact-container'));
+            document.getElementById('add-need-btn').addEventListener('click', () => addNeedField('needs-container'));
+            
+            // Setup dynamic field addition for Edit Modal
+            document.getElementById('add-edit-contact-btn').addEventListener('click', () => addContactField('edit-contact-container'));
+            document.getElementById('add-edit-need-btn').addEventListener('click', () => addEditNeedField('', 'edit-needs-container'));
+            
+            // Initial field creation for Add Modal (must be done after function definitions)
+            addContactField('contact-container');
+            addNeedField('needs-container');
+            
+            // Initial field creation for Edit Modal
+            addContactField('edit-contact-container');
+            addEditNeedField('', 'edit-needs-container');
+
+            // Add event listener for the instruction toggle
+            document.getElementById('toggle-instructions-btn').addEventListener('click', toggleInstructions);
+
+
+            // Add event listener for the district filter
+            document.getElementById('district-filter').addEventListener('change', (event) => {
+                loadShelters(event.target.value);
+            });
+
+            // Initialize Firebase
+            initFirebase();
+        };
+
+    </script>
+
+    <!-- Notification Box -->
+    <div id="notification-box" class="opacity-0 hidden"></div>
+
+    <!-- Main Content -->
+    <div class="container-padding max-w-7xl mx-auto">
+        
+        <header class="flex flex-col sm:flex-row justify-between items-center py-6 border-b border-gray-200">
+            <h1 class="text-3xl font-bold text-gray-800">ආපදා සහන මධ්‍යස්ථාන දත්ත පුවරුව</h1>
+            <div class="mt-4 sm:mt-0 flex items-center space-x-4">
+                <span id="user-id-display" class="text-sm text-gray-500">පරිශීලක හැඳුනුම්පත: පූරණය වෙමින්...</span>
+                <button id="add-shelter-btn" class="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg shadow-md hover:bg-blue-700 transition duration-150 transform hover:scale-[1.02]">
+                    + නව සහන මධ්‍යස්ථානයක් එක් කරන්න
+                </button>
+            </div>
+        </header>
+
+        <!-- Filter Area -->
+        <div class="py-4 flex flex-col sm:flex-row justify-start items-center bg-white rounded-xl shadow-sm mt-4 p-4 space-x-4">
+            <!-- Select Dropdown is now on the left -->
+            <select id="district-filter" class="w-full sm:w-64 p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition">
+                <!-- Options populated by JavaScript -->
+            </select>
+            <label for="district-filter" class="text-gray-700 font-medium text-sm sm:text-base mb-2 sm:mb-0">දිස්ත්‍රික්කය අනුව පෙරහන් කරන්න</label>
+        </div>
+        
+        <!-- Needs List Instructions Card (Now Collapsible) -->
+        <div class="mt-6 p-4 border border-blue-200 bg-blue-50 rounded-xl shadow-lg">
+            <!-- Clickable Header for Toggle -->
+            <button id="toggle-instructions-btn" class="w-full flex justify-between items-center text-left p-1 -m-1 focus:outline-none">
+                <h2 class="text-lg font-bold text-blue-800 flex items-center">
+                    <svg class="w-6 h-6 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    අවශ්‍යතා ලැයිස්තුව භාවිත කිරීමේ උපදෙස් සහ වැදගත් දැනුම්දීම
+                </h2>
+                <!-- Arrow Icon: Rotates 180deg when collapsed, 0deg when open -->
+                <svg id="toggle-icon" class="w-5 h-5 text-blue-600 transform transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+            </button>
+            
+            <!-- Collapsible Content -->
+            <!-- Note: max-height is managed by JS to allow smooth transitions -->
+            <div id="instructions-content" class="space-y-3 pt-3 mt-3 border-t border-blue-200 collapse-transition overflow-hidden">
+                <!-- Usage Instructions -->
+                <p class="text-gray-700 text-sm md:text-base">
+                    සෑම සහන මධ්‍යස්ථානයකම ඇති **අවශ්‍යතා ලැයිස්තුව (Needs List)** මගින් එම ස්ථානයට අවශ්‍ය ද්‍රව්‍ය සහ ඒවායේ වත්මන් තත්ත්වය පෙන්වයි:
+                </p>
+                <ul class="list-disc list-inside ml-4 text-sm text-gray-700 space-y-1">
+                    <li><span class="font-semibold text-red-600">අවශ්‍යයි</span>: යමක් තවමත් ලැබී නොමැති බව පෙන්වයි.</li>
+                    <li><span class="font-semibold text-green-600">ලැබී ඇත</span>: යමක් ලැබී ඇති බව පෙන්වයි.</li>
+                </ul>
+
+                <!-- Update Mandate -->
+                <p class="font-semibold text-blue-700 bg-blue-100 p-2 rounded-lg border border-blue-300">
+                    <span class="text-red-600">කරුණාකර යාවත්කාලීන කරන්න:</span> යම් අවශ්‍යතාවාවක් <span class="text-red-600">ලැබුණු වහාම</span>, අදාළ ද්‍රව්‍යය ඉදිරිපිට ඇති බොත්තම මත ක්ලික් කිරීමෙන් එහි තත්ත්වය <span class="text-green-600">ලැබී ඇත</span> ලෙස වෙනස් කරන්න.
+                </p>
+
+                <!-- IMPORTANT PUBLIC WARNING -->
+                <div class="p-3 bg-red-100 border border-red-300 rounded-lg">
+                    <p class="font-bold text-red-700 mb-1">
+                        <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                        වැදගත් දැනුම්දීම (අවවාදය)
+                    </p>
+                    <p class="text-gray-800 text-sm">
+                        මෙම දත්ත පද්ධතිය **පොදු** වන අතර, ඕනෑම පරිශීලකයෙකුට තොරතුරු සංස්කරණය කළ හැක.
+                    </p>
+                    <p class="text-gray-800 text-sm mt-1 font-semibold">
+                        එබැවින්, ඔබ ආධාර රැගෙන යාමට පෙර, කරුණාකර අදාළ සහන මධ්‍යස්ථානයේ සම්බන්ධීකාරකවරුන් අමතා **අවශ්‍යතාව තහවුරු කරගන්න**.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Dashboard Table -->
+        <main class="mt-4 bg-white rounded-xl shadow-lg overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-100">
+                        <tr>
+                            <th class="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-[15%]">
+                                දිස්ත්‍රික්කය
+                            </th>
+                            <th class="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-[15%]">
+                                සහන මධ්‍යස්ථාන ලිපිනය
+                            </th>
+                            <th class="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-[20%]">
+                                සම්බන්ධීකාරකගේ ඇමතුම්
+                            </th>
+                            <th class="p-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider w-[5%]">
+                                වත්මන් ජනගහනය
+                            </th>
+                            <th class="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-[35%]">
+                                අවශ්‍යතා ලැයිස්තුව
+                            </th>
+                            <th class="p-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider w-[10%]">
+                                ක්‍රියා
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody id="shelter-table-body" class="bg-white divide-y divide-gray-200">
+                        <!-- Data rows will be inserted here by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="loading-message" class="p-8 text-center text-lg text-blue-600 font-semibold">
+                පූරණය වෙමින්... කරුණාකර රැඳී සිටින්න.
+            </div>
+            <div id="no-data-message" class="p-8 text-center text-gray-500 hidden">
+                සහන මධ්‍යස්ථාන වාර්තා හමු නොවේ. කරුණාකර නව මධ්‍යස්ථානයක් එක් කරන්න.
+            </div>
+        </main>
+    </div>
+
+    <!-- Add Shelter Modal -->
+    <div id="add-shelter-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 z-40 flex justify-center items-center p-4" onclick="if(event.target === this) closeAddShelterModal()">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all">
+            <!-- Modal Header -->
+            <div class="p-5 border-b flex justify-between items-center bg-gray-50">
+                <h3 class="text-xl font-bold text-gray-800">නව සහන මධ්‍යස්ථාන තොරතුරු එක් කරන්න</h3>
+                <button id="close-add-modal-btn" class="text-gray-400 hover:text-gray-600 transition">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <!-- Modal Body (Form) -->
+            <form id="add-shelter-form" class="p-6 space-y-4">
+
+                <!-- District Field -->
+                <div>
+                    <label for="add-district" class="block text-sm font-medium text-gray-700">දිස්ත්‍රික්කය <span class="text-red-500">*</span></label>
+                    <select id="add-district" name="district" required class="mt-1 block w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        <!-- Options populated by JavaScript -->
+                    </select>
+                </div>
+                
+                <!-- Address Field -->
+                <div>
+                    <label for="address" class="block text-sm font-medium text-gray-700">ස්ථාන ලිපිනය <span class="text-red-500">*</span></label>
+                    <input type="text" id="address" name="address" required class="mt-1 block w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                </div>
+
+                <!-- Population Field -->
+                <div>
+                    <label for="population" class="block text-sm font-medium text-gray-700">වත්මන් ජනගහනය <span class="text-red-500">*</span></label>
+                    <input type="number" id="population" name="population" required min="1" value="1" class="mt-1 block w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                </div>
+
+                <!-- Contacts Section -->
+                <fieldset class="border p-4 rounded-lg">
+                    <legend class="text-base font-medium text-gray-900 px-1">සම්බන්ධතා විස්තර</legend>
+                    <div id="contact-container">
+                        <!-- Dynamic contact fields added here -->
+                    </div>
+                    <button type="button" id="add-contact-btn" class="mt-3 w-full flex items-center justify-center px-4 py-2 border border-dashed border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-gray-50 hover:bg-gray-100">
+                        + තවත් සම්බන්ධතා පුද්ගලයෙකු එක් කරන්න
+                    </button>
+                </fieldset>
+
+                <!-- Needs Section -->
+                <fieldset class="border p-4 rounded-lg">
+                    <legend class="text-base font-medium text-gray-900 px-1">අත්‍යවශ්‍ය අවශ්‍යතා (නොලැබුණු)</legend>
+                    <div id="needs-container">
+                        <!-- Dynamic need fields added here -->
+                    </div>
+                    <button type="button" id="add-need-btn" class="mt-3 w-full flex items-center justify-center px-4 py-2 border border-dashed border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-gray-50 hover:bg-gray-100">
+                        + තවත් අවශ්‍යතාවයක් එක් කරන්න
+                    </button>
+                </fieldset>
+
+                <!-- Modal Footer -->
+                <div class="pt-4 flex justify-end space-x-3">
+                    <button type="button" id="cancel-add-modal-btn" class="px-4 py-2 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 transition">
+                        අවලංගු කරන්න
+                    </button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition">
+                        තොරතුරු සුරකින්න
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Edit Shelter Modal -->
+    <div id="edit-shelter-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 z-40 flex justify-center items-center p-4" onclick="if(event.target === this) closeEditShelterModal()">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all">
+            <!-- Modal Header -->
+            <div class="p-5 border-b flex justify-between items-center bg-gray-50">
+                <h3 class="text-xl font-bold text-gray-800">සහන මධ්‍යස්ථාන තොරතුරු සංස්කරණය කරන්න</h3>
+                <button id="close-edit-modal-btn" class="text-gray-400 hover:text-gray-600 transition">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <!-- Modal Body (Form) -->
+            <form id="edit-shelter-form" class="p-6 space-y-4">
+                <input type="hidden" id="edit-shelter-id">
+
+                <!-- District Field -->
+                <div>
+                    <label for="edit-district" class="block text-sm font-medium text-gray-700">දිස්ත්‍රික්කය <span class="text-red-500">*</span></label>
+                    <select id="edit-district" name="district" required class="mt-1 block w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        <!-- Options populated by JavaScript -->
+                    </select>
+                </div>
+                
+                <!-- Address Field -->
+                <div>
+                    <label for="edit-address" class="block text-sm font-medium text-gray-700">ස්ථාන ලිපිනය <span class="text-red-500">*</span></label>
+                    <input type="text" id="edit-address" name="address" required class="mt-1 block w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                </div>
+
+                <!-- Population Field -->
+                <div>
+                    <label for="edit-population" class="block text-sm font-medium text-gray-700">වත්මන් ජනගහනය <span class="text-red-500">*</span></label>
+                    <input type="number" id="edit-population" name="population" required min="1" class="mt-1 block w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                </div>
+
+                <!-- Contacts Section -->
+                <fieldset class="border p-4 rounded-lg">
+                    <legend class="text-base font-medium text-gray-900 px-1">සම්බන්ධතා විස්තර</legend>
+                    <div id="edit-contact-container">
+                        <!-- Dynamic contact fields added here -->
+                    </div>
+                    <button type="button" id="add-edit-contact-btn" class="mt-3 w-full flex items-center justify-center px-4 py-2 border border-dashed border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-gray-50 hover:bg-gray-100">
+                        + තවත් සම්බන්ධතා පුද්ගලයෙකු එක් කරන්න
+                    </button>
+                </fieldset>
+
+                <!-- Needs Section - Only shows unreceived needs for editing/adding new shortages -->
+                <fieldset class="border p-4 rounded-lg">
+                    <legend class="text-base font-medium text-gray-900 px-1">අත්‍යවශ්‍ය අවශ්‍යතා (නොලැබුණු)</legend>
+                    <p class="text-xs text-gray-500 mb-2">ලැබුණු අවශ්‍යතා ප්‍රධාන දත්ත පුවරුවේදී යාවත්කාලීන කළ හැක. මෙහි ඇත්තේ දැනට නොලැබුණු අවශ්‍යතා පමණි.</p>
+                    <div id="edit-needs-container">
+                        <!-- Dynamic need fields added here (only unreceived needs populate) -->
+                    </div>
+                    <button type="button" id="add-edit-need-btn" class="mt-3 w-full flex items-center justify-center px-4 py-2 border border-dashed border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-gray-50 hover:bg-gray-100">
+                        + තවත් අවශ්‍යතාවයක් එක් කරන්න
+                    </button>
+                </fieldset>
+
+                <!-- Modal Footer -->
+                <div class="pt-4 flex justify-end space-x-3">
+                    <button type="button" id="cancel-edit-modal-btn" class="px-4 py-2 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 transition">
+                        අවලංගු කරන්න
+                    </button>
+                    <button type="submit" class="px-4 py-2 bg-yellow-600 text-white font-medium rounded-lg hover:bg-yellow-700 transition">
+                        යාවත්කාලීන කරන්න
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+</body>
+</html>
