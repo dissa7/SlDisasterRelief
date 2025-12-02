@@ -65,7 +65,8 @@
   <!-- Firebase Imports -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    // Removed Google sign-in/out related imports
+    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, setLogLevel, getDoc, query, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     // --- FIREBASE CONFIGURATION ---
@@ -79,11 +80,11 @@
     };
 
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'disaster-relief-sl-public-v1';
-    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
+    
     let db;
     let auth;
     let userId = null;
+    let isAnonymous = true;
     let isAuthReady = false;
 
     // Sri Lankan Districts
@@ -132,18 +133,23 @@
         populateDistrictFilters();
 
         if (!auth.currentUser) {
-          if (initialAuthToken) {
-            await signInWithCustomToken(auth, initialAuthToken);
-          } else {
+          try {
+            // Attempt anonymous sign-in for basic read access/user tracking
             await signInAnonymously(auth);
+            console.log("Signed in anonymously.");
+          } catch (e) {
+            // This often fails if anonymous auth is disabled, but we proceed.
+            console.warn("Anonymous auth failed (Error details below, proceeding without ID):", e);
           }
         }
 
         onAuthStateChanged(auth, (user) => {
           if (user) {
             userId = user.uid;
+            isAnonymous = user.isAnonymous;
           } else {
             userId = null;
+            isAnonymous = true;
           }
 
           if (!isAuthReady && db) {
@@ -152,7 +158,7 @@
             loadShelters(initialDistrict);
             initializeInstructionsHeight();
           }
-          updateUserIdDisplay();
+          updateAuthUI();
         });
 
       } catch (error) {
@@ -161,11 +167,45 @@
       }
     };
 
-    const updateUserIdDisplay = () => {
-      const userIdDisplay = document.getElementById('user-id-display');
-      if (userIdDisplay) {
-        userIdDisplay.innerHTML = `<span class="opacity-75">UID:</span> ${userId ? userId.slice(0, 6) + '...' : '...'}`;
+    // Removed loginWithGoogle and logout as they fail due to 'auth/unauthorized-domain'
+
+    const updateAuthUI = () => {
+      const authContainer = document.getElementById('auth-container');
+      const addShelterButton = document.querySelector('[onclick="openAddShelterModal()"]');
+
+      // Due to 'auth/unauthorized-domain' error, Google Sign-in is not working.
+      // The app is stuck in read-only mode, as the security rules likely prevent anonymous/unauthenticated writes.
+      
+      const statusText = isAnonymous && userId 
+          ? 'කියවීම පමණක්' 
+          : 'පිවිසීම නැත';
+      
+      authContainer.innerHTML = `
+        <div class="flex items-center gap-3">
+          <span class="text-xs text-red-700 font-medium bg-red-50 px-2 py-1 rounded-full border border-red-200">
+            ⚠ ${statusText}
+          </span>
+        </div>
+      `;
+
+      if (addShelterButton) {
+        // Disable the add button and explain why
+        addShelterButton.disabled = true;
+        addShelterButton.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+        addShelterButton.classList.add('bg-gray-400', 'cursor-not-allowed');
+        addShelterButton.title = "දත්ත ඇතුලත් කිරීමට Firebase Console එකේ Google Sign-in සඳහා Domain එක Whitelist කරන්න.";
       }
+    };
+
+    const checkPermission = () => {
+        // Since Google sign-in is failing due to unauthorized-domain, 
+        // all write operations must be blocked.
+        showNotification('දත්ත ඇතුලත් කිරීමේ අවසරය දැනට අක්‍රියයි (Domain Error).', 'red');
+        return false;
+    };
+
+    const updateUserIdDisplay = () => {
+      // Not needed for anonymous ID
     };
 
     const getSheltersCollection = () => {
@@ -228,17 +268,22 @@
         });
       }, (error) => {
         console.error("Fetch error:", error);
-        loadingMessage.textContent = 'දත්ත ලබාගැනීම අසාර්ථක විය.';
+        loadingMessage.classList.remove('hidden');
+        if (error.code === 'permission-denied') {
+             loadingMessage.textContent = 'දත්ත ලබාගැනීම අසාර්ථක විය: Firebase ආරක්ෂක නීති (Security Rules) පරීක්ෂා කරන්න. එය නාඳුනන (unauthenticated) පරිශීලකයින්ට කියවීමට අවසර දිය යුතුය.';
+        } else {
+             loadingMessage.textContent = 'දත්ත ලබාගැනීම අසාර්ථක විය.';
+        }
       });
     };
 
     // --- Delete Operation ---
     window.deleteShelter = async (shelterId) => {
-      if (!db || !userId) {
-        showNotification('දෝෂය: අවසර නැත.', 'red');
-        return;
-      }
+      if (!db || !userId) return;
+      
+      if (!checkPermission()) return;
 
+      // Custom Modal logic should be used here, but using confirm for now.
       if (confirm("ඔබට මෙම සහන මධ්‍යස්ථානය පද්ධතියෙන් ඉවත් කිරීමට අවශ්‍ය බව විශ්වාසද? මෙය නැවත හැරවිය නොහැක.")) {
         try {
           await deleteDoc(doc(getSheltersCollection(), shelterId));
@@ -310,6 +355,7 @@
         toggleBtn.className = `ml-2 px-2 py-1 text-[10px] font-bold uppercase tracking-wider rounded transition-colors ${isReceived ? 'bg-green-200 text-green-800 hover:bg-green-300' : 'bg-red-100 text-red-700 hover:bg-red-200'}`;
         toggleBtn.textContent = isReceived ? 'ලැබී ඇත' : 'අවශ්‍යයි';
         toggleBtn.onclick = () => toggleNeedReceived(shelter.id, index, !isReceived);
+        toggleBtn.disabled = !userId || !checkPermission(); // Disable button if not properly authenticated
 
         needItem.innerHTML = `<span class="${isReceived ? 'text-gray-500 line-through' : 'text-gray-800 font-medium'}">${need.item}</span>`;
         needItem.appendChild(toggleBtn);
@@ -327,11 +373,11 @@
       cellActions.className = 'p-4 align-top text-center';
       cellActions.innerHTML = `
                 <div class="flex flex-col space-y-2 items-center justify-center h-full">
-                    <button onclick="openEditShelterModal('${shelter.id}')" class="w-full max-w-[120px] px-3 py-1.5 bg-white border border-yellow-400 text-yellow-600 hover:bg-yellow-50 font-medium rounded text-xs transition shadow-sm flex items-center justify-center">
+                    <button onclick="openEditShelterModal('${shelter.id}')" class="w-full max-w-[120px] px-3 py-1.5 bg-gray-300 cursor-not-allowed border border-yellow-400 text-yellow-600 font-medium rounded text-xs transition shadow-sm flex items-center justify-center" disabled title="සංස්කරණය කිරීමට අවසර නැත">
                         <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
                         සංස්කරණය
                     </button>
-                    <button onclick="deleteShelter('${shelter.id}')" class="w-full max-w-[120px] px-3 py-1.5 bg-white border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 font-medium rounded text-xs transition shadow-sm flex items-center justify-center">
+                    <button onclick="deleteShelter('${shelter.id}')" class="w-full max-w-[120px] px-3 py-1.5 bg-gray-300 cursor-not-allowed border border-red-200 text-red-600 font-medium rounded text-xs transition shadow-sm flex items-center justify-center" disabled title="ඉවත් කිරීමට අවසර නැත">
                         <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                         ඉවත් කරන්න
                     </button>
@@ -342,7 +388,10 @@
     };
 
     const toggleNeedReceived = async (shelterId, needIndex, newStatus) => {
-      if (!db || !userId) return showNotification('දෝෂය: අවසර නැත.', 'red');
+      if (!db || !userId) return;
+      
+      if (!checkPermission()) return;
+
       try {
         const shelterRef = doc(getSheltersCollection(), shelterId);
         const s = await getDoc(shelterRef);
@@ -380,6 +429,7 @@
 
     // Add Modal
     window.openAddShelterModal = () => {
+      if (!checkPermission()) return;
       document.getElementById('contact-container').innerHTML = '';
       document.getElementById('needs-container').innerHTML = '';
       window.addDynamicField('contact-container', 'contact');
@@ -393,6 +443,7 @@
 
     // Edit Modal
     window.openEditShelterModal = async (id) => {
+      if (!checkPermission()) return;
       const s = (await getDoc(doc(getSheltersCollection(), id))).data();
       const f = document.getElementById('edit-shelter-form');
       f.querySelector('#edit-shelter-id').value = id;
@@ -426,7 +477,7 @@
 
     window.handleSubmitShelter = async (e) => {
       e.preventDefault();
-      if (!userId) return showNotification('පරිශීලක දෝෂයකි.', 'red');
+      if (!userId || isAnonymous) return showNotification('දත්ත ඇතුලත් කිරීමේ අවසරය දැනට අක්‍රියයි (Domain Error).', 'red');
 
       const f = e.target;
       const data = {
@@ -448,7 +499,7 @@
 
     window.handleSubmitEditShelter = async (e) => {
       e.preventDefault();
-      if (!userId) return showNotification('පරිශීලක දෝෂයකි.', 'red');
+      if (!userId || isAnonymous) return showNotification('දත්ත ඇතුලත් කිරීමේ අවසරය දැනට අක්‍රියයි (Domain Error).', 'red');
 
       const f = e.target;
       const id = f.querySelector('#edit-shelter-id').value;
@@ -511,8 +562,6 @@
       document.getElementById('add-shelter-form').addEventListener('submit', handleSubmitShelter);
       document.getElementById('edit-shelter-form').addEventListener('submit', handleSubmitEditShelter);
 
-      // Re-render needs container on edit modal open? No, logic handled in open function.
-
       initFirebase();
     };
   </script>
@@ -530,9 +579,11 @@
         <p class="text-sm text-gray-500 mt-1">Disaster Relief Centers Dashboard - Sri Lanka</p>
       </div>
       <div class="flex items-center gap-4">
-        <div id="user-id-display" class="text-xs text-gray-400 font-mono hidden md:block">...</div>
+        <!-- Auth Container now shows read-only status -->
+        <div id="auth-container"></div>
         <button onclick="openAddShelterModal()"
-          class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg shadow-sm font-medium transition flex items-center gap-2">
+          class="bg-gray-400 cursor-not-allowed text-white px-5 py-2.5 rounded-lg shadow-sm font-medium transition flex items-center gap-2"
+          disabled title="දත්ත ඇතුලත් කිරීමට Firebase Console එකේ Google Sign-in සඳහා Domain එක Whitelist කරන්න.">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
           </svg>
@@ -568,6 +619,8 @@
               නොමැත.</li>
             <li><span class="text-green-600 font-bold bg-green-50 px-1 rounded">ලැබී ඇත</span> - මෙම ද්‍රව්‍ය ලැබී ඇත.
               (බොත්තම ක්ලික් කිරීමෙන් තත්ත්වය වෙනස් කළ හැක)</li>
+             <li class="font-medium text-red-700"><strong>දැනුම්දීම:</strong> අවසර දීමේ දෝෂ හේතුවෙන් දත්ත ඇතුලත් කිරීමට
+               සහ සංස්කරණය කිරීමට ඇති බොත්තම් දැනට අක්‍රිය කර ඇත.</li>
           </ul>
           <div class="bg-yellow-50 border-l-4 border-yellow-400 p-3 text-yellow-800 rounded-r text-xs mt-2">
             <strong>අවවාදයයි:</strong> මෙය පොදු වේදිකාවකි. ආධාර රැගෙන යාමට පෙර කරුණාකර අදාළ සම්බන්ධීකාරක අමතා අවශ්‍යතාවය
