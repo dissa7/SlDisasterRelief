@@ -85,34 +85,193 @@
     let auth;
     let currentUser = null; // Stores the full user object
     let isAuthReady = false;
+    let currentLanguage = 'si'; // Default Language
 
-    // Sri Lankan Districts
+    // --- TRANSLATIONS ---
+    const i18n = {
+      si: {
+        title: "ආපදා සහන මධ්‍යස්ථාන දත්ත පුවරුව",
+        subtitle: "Disaster Relief Centers Dashboard - Sri Lanka",
+        login_google: "Google ඇතුල් වීම",
+        logout: "ඉවත් වන්න",
+        editor: "Editor",
+        viewer: "නරඹන්නා (Read Only)",
+        new_shelter: "නව මධ්‍යස්ථානයක්",
+        instructions_title: "උපදෙස් සහ වැදගත් දැනුම්දීම",
+        instructions_1: "තොරතුරු <strong>නැරඹීමට</strong> පමණක් නම් ඔබට ඇතුල් වීමට (Login) අවශ්‍ය නැත.",
+        instructions_2: "තොරතුරු <strong>එක් කිරීමට, සංස්කරණය කිරීමට හෝ මැකීමට</strong> Google ගිණුමක් මගින් ඇතුල් වන්න.",
+        instructions_3: "<span class=\"text-red-600 font-bold bg-red-50 px-1 rounded\">අවශ්‍යයි</span> - මෙම ද්‍රව්‍ය තවමත් ලැබී නොමැත, වෙනස් කිරීමට වචනය  ඔබන්න.",
+        instructions_4: "<span class=\"text-green-600 font-bold bg-green-50 px-1 rounded\">ලැබී ඇත</span> - මෙම ද්‍රව්‍ය ලැබී ඇත, වෙනස් කිරීමට වචනය  ඔබන්න.",
+        instructions_5: "මෙය පොදු ජනතාවට වෙනස් කල හැකි පද්දතියකි. පොදු ජනයාගේ උපකාරය පිණිස පවතින බැවින් වැරදි හා වංචාකාරී දත්ත ඇතුලත් කිරීමෙන් වලකින්න.",
+        warning: "<strong>අවවාදයයි:</strong> මෙය පොදු වේදිකාවකි. ආධාර රැගෙන යාමට පෙර කරුණාකර අදාළ සම්බන්ධීකාරක අමතා අවශ්‍යතාවය තහවුරු කරගන්න.",
+        filter_label: "දිස්ත්‍රික්කය තෝරන්න",
+        all_districts: "සියලුම දිස්ත්‍රික්ක පෙන්වන්න",
+        select_district_placeholder: "-- දිස්ත්‍රික්කය තෝරන්න --",
+        total_affected: "මුළු පීඩාවට පත් ජනගහනය",
+        th_district: "දිස්ත්‍රික්කය",
+        th_address: "ලිපිනය & සම්බන්ධතා",
+        th_population: "ජනගහනය",
+        th_needs: "අවශ්‍යතා ලැයිස්තුව",
+        th_verified: "තහවුරු කිරීම",
+        th_updated: "යාවත්කාලීන වූයේ",
+        th_actions: "ක්‍රියා",
+        loading: "දත්ත පූරණය වෙමින්...",
+        no_data: "තොරතුරු හමු නොවේ.",
+        verified: "තහවුරු කර ඇත",
+        not_verified: "තහවුරු කර නැත",
+        received: "ලැබී ඇත",
+        required: "අවශ්‍යයි",
+        male: "පිරිමි",
+        female: "ගැහැණු",
+        total: "එකතුව",
+        unknown: "නොදන්නා",
+        no_address: "ලිපිනයක් නැත",
+        no_contacts: "සම්බන්ධතා නැත",
+        gov_officer: "රජයේ නිලධාරී",
+        volunteer: "ස්වේච්ඡා",
+        edit: "සංස්කරණය",
+        delete: "ඉවත් කරන්න",
+        read_only: "පමණක් කියවිය හැක",
+        modal_add_title: "නව සහන මධ්‍යස්ථානයක්",
+        modal_edit_title: "තොරතුරු සංස්කරණය",
+        label_district: "දිස්ත්‍රික්කය",
+        label_address: "ලිපිනය (අනිවාර්යයි)",
+        label_pop_male: "පිරිමි",
+        label_pop_female: "ගැහැණු",
+        label_contacts: "සම්බන්ධතා (අවම 1ක් අනිවාර්යයි)",
+        btn_add_contact: "+ අංකයක් එක් කරන්න",
+        label_needs: "අවශ්‍ය ද්‍රව්‍ය (Need List)",
+        label_new_needs: "අලුතින් අවශ්‍ය ද්‍රව්‍ය (New Items Only)",
+        btn_add_need: "+ අවශ්‍යතාවයක් එක් කරන්න",
+        btn_cancel: "අවලංගු කරන්න",
+        btn_save: "සුරකින්න",
+        btn_update: "යාවත්කාලීන කරන්න",
+        ph_name: "නම",
+        ph_number: "අංකය",
+        ph_item: "අවශ්‍ය ද්‍රව්‍යය",
+        msg_login_success: "සාර්ථකව ඇතුල් විය!",
+        msg_login_fail: "ඇතුල් වීම අසාර්ථකයි.",
+        msg_logout: "ඉවත් විය.",
+        msg_editor_req: "සංස්කරණය කිරීම සඳහා කරුණාකර Google හරහා ඇතුල් වන්න.",
+        msg_confirm_delete: "ඔබට මෙම සහන මධ්‍යස්ථානය පද්ධතියෙන් ඉවත් කිරීමට අවශ්‍ය බව විශ්වාසද? මෙය නැවත හැරවිය නොහැක.",
+        msg_delete_success: "මධ්‍යස්ථානය සාර්ථකව ඉවත් කරන ලදී.",
+        msg_delete_fail: "දෝෂය: ඉවත් කිරීම අසාර්ථක විය.",
+        msg_verified: "ස්ථානය තහවුරු කරන ලදී.",
+        msg_unverified: "තහවුරු කිරීම ඉවත් කරන ලදී.",
+        msg_error: "දෝෂයක් සිදු විය.",
+        msg_update_success: "තත්ත්වය යාවත්කාලීන විය.",
+        msg_missing_address: "ලිපිනය ඇතුළත් කිරීම අනිවාර්ය වේ.",
+        msg_missing_contact: "අවම වශයෙන් එක් සම්බන්ධතා අංකයක් ඇතුළත් කිරීම අනිවාර්ය වේ.",
+        msg_missing_phone: "සියලු සම්බන්ධතා සඳහා දුරකථන අංක ඇතුළත් කිරීම අනිවාර්ය වේ.",
+        msg_invalid_phone: "දුරකථන අංකය ඉලක්කම් 10කින් යුක්ත විය යුතුය.",
+        needs_empty: "අවශ්‍යතා ලැයිස්තුගත කර නැත"
+      },
+      ta: {
+        title: "அனர்த்த நிவாரண நிலையங்கள் தரவு பலகை",
+        subtitle: "Disaster Relief Centers Dashboard - Sri Lanka",
+        login_google: "Google மூலம் உள்நுழைக",
+        logout: "வெளியேறு",
+        editor: "பதிப்பாசிரியர்",
+        viewer: "பார்வையாளர் (Read Only)",
+        new_shelter: "புதிய நிலையம்",
+        instructions_title: "அறிவுறுத்தல்கள் மற்றும் முக்கிய அறிவிப்பு",
+        instructions_1: "தகவல்களை <strong>பார்வையிட</strong> மட்டும் என்றால் நீங்கள் உள்நுழைய (Login) தேவையில்லை.",
+        instructions_2: "தகவல்களை <strong>சேர்க்க, திருத்த அல்லது நீக்க</strong> Google கணக்கு மூலம் உள்நுழையவும்.",
+        instructions_3: "<span class=\"text-red-600 font-bold bg-red-50 px-1 rounded\">தேவை</span> - இந்த பொருட்கள் இன்னும் கிடைக்கவில்லை, மாற்ற வார்த்தையை அழுத்தவும்.",
+        instructions_4: "<span class=\"text-green-600 font-bold bg-green-50 px-1 rounded\">கிடைத்தது</span> - இந்த பொருட்கள் கிடைத்துள்ளன, மாற்ற வார்த்தையை அழுத்தவும்.",
+        instructions_5: "இது பொது மக்களால் மாற்றக்கூடிய ஒரு அமைப்பாகும். பொதுமக்களின் உதவிக்காக இருப்பதால் தவறான மற்றும் மோசடியான தரவுகளை உள்ளிடுவதைத் தவிர்க்கவும்.",
+        warning: "<strong>எச்சரிக்கை:</strong> இது ஒரு பொது தளம். உதவிகளை கொண்டு செல்வதற்கு முன் தயவுசெய்து தொடர்புடைய ஒருங்கிணைப்பாளரை தொடர்பு கொண்டு தேவையை உறுதிப்படுத்தவும்.",
+        filter_label: "மாவட்டத்தை தெரிவு செய்க",
+        all_districts: "அனைத்து மாவட்டங்களையும் காட்டு",
+        select_district_placeholder: "-- மாவட்டத்தை தெரிவு செய்க --",
+        total_affected: "பாதிக்கப்பட்ட மொத்த மக்கள் தொகை",
+        th_district: "மாவட்டம்",
+        th_address: "முகவரி & தொடர்புகள்",
+        th_population: "மக்கள் தொகை",
+        th_needs: "தேவைகள் பட்டியல்",
+        th_verified: "உறுதிப்படுத்தல்",
+        th_updated: "இற்றைப்படுத்தப்பட்டது",
+        th_actions: "செயல்கள்",
+        loading: "தரவு ஏற்றப்படுகிறது...",
+        no_data: "தகவல் இல்லை.",
+        verified: "உறுதிப்படுத்தப்பட்டது",
+        not_verified: "உறுதிப்படுத்தப்படவில்லை",
+        received: "கிடைத்தது",
+        required: "தேவை",
+        male: "ஆண்",
+        female: "பெண்",
+        total: "மொத்தம்",
+        unknown: "தெரியவில்லை",
+        no_address: "முகவரி இல்லை",
+        no_contacts: "தொடர்புகள் இல்லை",
+        gov_officer: "அரச அதிகாரி",
+        volunteer: "தன்னார்வலர்",
+        edit: "திருத்து",
+        delete: "நீக்கு",
+        read_only: "படிக்க மட்டும்",
+        modal_add_title: "புதிய நிவாரண நிலையம்",
+        modal_edit_title: "தகவல்களை திருத்து",
+        label_district: "மாவட்டம்",
+        label_address: "முகவரி (கட்டாயம்)",
+        label_pop_male: "ஆண்",
+        label_pop_female: "பெண்",
+        label_contacts: "தொடர்புகள் (குறைந்தது 1 கட்டாயம்)",
+        btn_add_contact: "+ இலக்கத்தை சேர்",
+        label_needs: "தேவையான பொருட்கள் (Need List)",
+        label_new_needs: "புதிதாகத் தேவையான பொருட்கள் (New Items Only)",
+        btn_add_need: "+ தேவையை சேர்",
+        btn_cancel: "ரத்து செய்",
+        btn_save: "சேமி",
+        btn_update: "இற்றைப்படுத்து",
+        ph_name: "பெயர்",
+        ph_number: "இலக்கம்",
+        ph_item: "தேவையான பொருள்",
+        msg_login_success: "வெற்றிகரமாக உள்நுழைந்தது!",
+        msg_login_fail: "உள்நுழைவு தோல்வியடைந்தது.",
+        msg_logout: "வெளியேறியது.",
+        msg_editor_req: "திருத்துவதற்கு தயவுசெய்து Google மூலம் உள்நுழையவும்.",
+        msg_confirm_delete: "இந்த நிவாரண நிலையத்தை அமைப்பிலிருந்து நீக்க விரும்புகிறீர்களா? இதை மீண்டும் மாற்ற முடியாது.",
+        msg_delete_success: "நிலையம் வெற்றிகரமாக நீக்கப்பட்டது.",
+        msg_delete_fail: "பிழை: நீக்கம் தோல்வியடைந்தது.",
+        msg_verified: "இடம் உறுதிப்படுத்தப்பட்டது.",
+        msg_unverified: "உறுதிப்படுத்தல் நீக்கப்பட்டது.",
+        msg_error: "பிழை ஏற்பட்டது.",
+        msg_update_success: "நிலை இற்றைப்படுத்தப்பட்டது.",
+        msg_missing_address: "முகவரி உள்ளிடுவது கட்டாயமாகும்.",
+        msg_missing_contact: "குறைந்தது ஒரு தொடர்பு இலக்கத்தை உள்ளிடுவது கட்டாயமாகும்.",
+        msg_missing_phone: "அனைத்து தொடர்புகளுக்கும் தொலைபேசி எண்களை உள்ளிடுவது கட்டாயமாகும்.",
+        msg_invalid_phone: "தொலைபேசி எண் 10 இலக்கங்களைக் கொண்டிருக்க வேண்டும்.",
+        needs_empty: "தேவைகள் பட்டியலிடப்படவில்லை"
+      }
+    };
+
+    // Sri Lankan Districts with Tamil
     const sriLankanDistricts = [
-      { value: 'Ampara', text: 'අම්පාර' },
-      { value: 'Anuradhapura', text: 'අනුරාධපුරය' },
-      { value: 'Badulla', text: 'බදුල්ල' },
-      { value: 'Batticaloa', text: 'මඩකලපුව' },
-      { value: 'Colombo', text: 'කොළඹ' },
-      { value: 'Galle', text: 'ගාල්ල' },
-      { value: 'Gampaha', text: 'ගම්පහ' },
-      { value: 'Hambantota', text: 'හම්බන්තොට' },
-      { value: 'Jaffna', text: 'යාපනය' },
-      { value: 'Kalutara', text: 'කළුතර' },
-      { value: 'Kandy', text: 'මහනුවර' },
-      { value: 'Kegalle', text: 'කෑගල්ල' },
-      { value: 'Kilinochchi', text: 'කිලිනොච්චිය' },
-      { value: 'Kurunegala', text: 'කුරුණෑගල' },
-      { value: 'Mannar', text: 'මන්නාරම' },
-      { value: 'Matale', text: 'මාතලේ' },
-      { value: 'Matara', text: 'මාතර' },
-      { value: 'Moneragala', text: 'මොනරාගල' },
-      { value: 'Mullaitivu', text: 'මුලතිව්' },
-      { value: 'Nuwara Eliya', text: 'නුවරඑළිය' },
-      { value: 'Polonnaruwa', text: 'පොළොන්නරුව' },
-      { value: 'Puttalam', text: 'පුත්තලම' },
-      { value: 'Ratnapura', text: 'රත්නපුරය' },
-      { value: 'Trincomalee', text: 'ත්‍රිකුණාමලය' },
-      { value: 'Vavuniya', text: 'වවුනියාව' }
+      { value: 'Ampara', text_si: 'අම්පාර', text_ta: 'அம்பாறை' },
+      { value: 'Anuradhapura', text_si: 'අනුරාධපුරය', text_ta: 'அனுராதபுரம்' },
+      { value: 'Badulla', text_si: 'බදුල්ල', text_ta: 'பதுளை' },
+      { value: 'Batticaloa', text_si: 'මඩකලපුව', text_ta: 'மட்டக்களப்பு' },
+      { value: 'Colombo', text_si: 'කොළඹ', text_ta: 'கொழும்பு' },
+      { value: 'Galle', text_si: 'ගාල්ල', text_ta: 'காலி' },
+      { value: 'Gampaha', text_si: 'ගම්පහ', text_ta: 'கம்பஹா' },
+      { value: 'Hambantota', text_si: 'හම්බන්තොට', text_ta: 'அம்பாந்தோட்டை' },
+      { value: 'Jaffna', text_si: 'යාපනය', text_ta: 'யாழ்ப்பாணம்' },
+      { value: 'Kalutara', text_si: 'කළුතර', text_ta: 'களுத்துறை' },
+      { value: 'Kandy', text_si: 'මහනුවර', text_ta: 'கண்டி' },
+      { value: 'Kegalle', text_si: 'කෑගල්ල', text_ta: 'கேகாலை' },
+      { value: 'Kilinochchi', text_si: 'කිලිනොච්චිය', text_ta: 'கிளிநொச்சி' },
+      { value: 'Kurunegala', text_si: 'කුරුණෑගල', text_ta: 'குருநாகல்' },
+      { value: 'Mannar', text_si: 'මන්නාරම', text_ta: 'மன்னார்' },
+      { value: 'Matale', text_si: 'මාතලේ', text_ta: 'மாத்தளை' },
+      { value: 'Matara', text_si: 'මාතර', text_ta: 'மாத்தறை' },
+      { value: 'Moneragala', text_si: 'මොනරාගල', text_ta: 'மொனராகலை' },
+      { value: 'Mullaitivu', text_si: 'මුලතිව්', text_ta: 'முல்லைத்தீவு' },
+      { value: 'Nuwara Eliya', text_si: 'නුවරඑළිය', text_ta: 'நுவரெலியா' },
+      { value: 'Polonnaruwa', text_si: 'පොළොන්නරුව', text_ta: 'பொலன்னறுவை' },
+      { value: 'Puttalam', text_si: 'පුත්තලම', text_ta: 'புத்தளம்' },
+      { value: 'Ratnapura', text_si: 'රත්නපුරය', text_ta: 'இரத்தினபுரி' },
+      { value: 'Trincomalee', text_si: 'ත්‍රිකුණාමලය', text_ta: 'திருகோணமலை' },
+      { value: 'Vavuniya', text_si: 'වවුනියාව', text_ta: 'வவுனியா' }
     ];
 
     setLogLevel('Debug');
@@ -124,7 +283,8 @@
         db = getFirestore(app);
         auth = getAuth(app);
 
-        populateDistrictFilters();
+        // Initial setup
+        updateLanguage(currentLanguage);
 
         const initAuth = async () => {
           if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -166,15 +326,54 @@
       }
     };
 
+    // --- Language Functionality ---
+    window.setLanguage = (lang) => {
+      currentLanguage = lang;
+      updateLanguage(lang);
+      
+      // Refresh Data display
+      const initialDistrict = document.getElementById('district-filter')?.value || 'All';
+      loadShelters(initialDistrict);
+      updateAuthUI();
+    };
+
+    const updateLanguage = (lang) => {
+      // Toggle button styles
+      document.getElementById('btn-lang-si').className = lang === 'si' ? 'font-bold underline text-blue-700' : 'text-gray-500 hover:text-gray-700';
+      document.getElementById('btn-lang-ta').className = lang === 'ta' ? 'font-bold underline text-blue-700' : 'text-gray-500 hover:text-gray-700';
+
+      // Update simple elements with data-i18n attribute
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (i18n[lang][key]) {
+          el.innerHTML = i18n[lang][key];
+        }
+      });
+
+      // Update Placeholders
+      document.querySelectorAll('[data-i18n-ph]').forEach(el => {
+        const key = el.getAttribute('data-i18n-ph');
+        if (i18n[lang][key]) {
+          el.placeholder = i18n[lang][key];
+        }
+      });
+
+      // Re-populate districts
+      populateDistrictFilters();
+    };
+
+    const getText = (key) => i18n[currentLanguage][key] || key;
+
+
     // --- Google Auth Functions ---
     window.handleGoogleLogin = async () => {
         const provider = new GoogleAuthProvider();
         try {
             await signInWithPopup(auth, provider);
-            showNotification('සාර්ථකව ඇතුල් විය!', 'green');
+            showNotification(getText('msg_login_success'), 'green');
         } catch (error) {
             console.error("Login failed:", error);
-            showNotification('ඇතුල් වීම අසාර්ථකයි.', 'red');
+            showNotification(getText('msg_login_fail'), 'red');
         }
     };
 
@@ -182,7 +381,7 @@
         try {
             await signOut(auth);
             await signInAnonymously(auth);
-            showNotification('ඉවත් විය.', 'green');
+            showNotification(getText('msg_logout'), 'green');
         } catch (error) {
             console.error("Logout failed:", error);
         }
@@ -203,19 +402,19 @@
             <div class="flex items-center gap-3">
               <span class="text-xs text-blue-700 font-medium bg-blue-50 px-2 py-1 rounded-full border border-blue-200 flex items-center gap-1">
                 <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                ${currentUser.displayName || 'Editor'}
+                ${currentUser.displayName || getText('editor')}
               </span>
-              <button onclick="handleLogout()" class="text-xs text-red-600 hover:text-red-800 underline">ඉවත් වන්න</button>
+              <button onclick="handleLogout()" class="text-xs text-red-600 hover:text-red-800 underline">${getText('logout')}</button>
             </div>`;
       } else {
            statusHtml = `
             <div class="flex items-center gap-3">
               <span class="text-xs text-gray-600 font-medium bg-gray-100 px-2 py-1 rounded-full border border-gray-200 flex items-center gap-1">
-                නරඹන්නා (Read Only)
+                ${getText('viewer')}
               </span>
               <button onclick="handleGoogleLogin()" class="flex items-center gap-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-xs font-semibold py-1.5 px-3 rounded shadow-sm transition">
                 <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-                Google ඇතුල් වීම
+                ${getText('login_google')}
               </button>
             </div>`;
       }
@@ -223,26 +422,28 @@
       authContainer.innerHTML = statusHtml;
 
       if (addShelterButton) {
+        addShelterButton.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg> ${getText('new_shelter')}`;
         if (isEditor()) {
             addShelterButton.disabled = false;
             addShelterButton.classList.remove('bg-gray-300', 'cursor-not-allowed', 'opacity-50');
             addShelterButton.classList.add('bg-blue-600', 'hover:bg-blue-700', 'text-white');
-            addShelterButton.title = "නව සහන මධ්‍යස්ථානයක් එක් කරන්න";
+            addShelterButton.title = getText('new_shelter');
         } else {
             addShelterButton.disabled = true;
             addShelterButton.classList.add('bg-gray-300', 'cursor-not-allowed', 'opacity-50');
             addShelterButton.classList.remove('bg-blue-600', 'hover:bg-blue-700', 'text-white');
-            addShelterButton.title = "ඇතුල් වන්න";
+            addShelterButton.title = getText('login_google');
         }
       }
 
-      const initialDistrict = document.getElementById('district-filter')?.value || 'All';
-      loadShelters(initialDistrict);
+      // Refresh rows for actions text
+      // const initialDistrict = document.getElementById('district-filter')?.value || 'All';
+      // loadShelters(initialDistrict);
     };
 
     const checkPermission = () => {
         if (!isEditor()) {
-            showNotification('සංස්කරණය කිරීම සඳහා කරුණාකර Google හරහා ඇතුල් වන්න.', 'red');
+            showNotification(getText('msg_editor_req'), 'red');
             return false;
         }
         return true;
@@ -259,17 +460,24 @@
       const addFormElement = document.getElementById('add-district');
       const editFormElement = document.getElementById('edit-district');
 
+      // Preserve current selection if refreshing
+      const currentFilter = filterElement?.value || 'All';
+
       const createOptions = (defaultText) => {
         let html = `<option value="">${defaultText}</option>`;
         sriLankanDistricts.forEach(d => {
-          html += `<option value="${d.value}">${d.text}</option>`;
+          const text = currentLanguage === 'si' ? d.text_si : d.text_ta;
+          html += `<option value="${d.value}">${text}</option>`;
         });
         return html;
       };
 
-      if (filterElement) filterElement.innerHTML = `<option value="All">සියලුම දිස්ත්‍රික්ක පෙන්වන්න</option>` + createOptions('').replace('<option value="">', '');
-      if (addFormElement) addFormElement.innerHTML = createOptions('-- දිස්ත්‍රික්කය තෝරන්න --');
-      if (editFormElement) editFormElement.innerHTML = createOptions('-- දිස්ත්‍රික්කය තෝරන්න --');
+      if (filterElement) {
+         filterElement.innerHTML = `<option value="All">${getText('all_districts')}</option>` + createOptions('').replace('<option value="">', '');
+         filterElement.value = currentFilter;
+      }
+      if (addFormElement) addFormElement.innerHTML = createOptions(getText('select_district_placeholder'));
+      if (editFormElement) editFormElement.innerHTML = createOptions(getText('select_district_placeholder'));
     }
 
     // --- Data Operations ---
@@ -285,6 +493,7 @@
       const loadingMessage = document.getElementById('loading-message');
       const shelterTableBody = document.getElementById('shelter-table-body');
       const noDataMessage = document.getElementById('no-data-message');
+      const totalPopElement = document.getElementById('total-population-display');
 
       loadingMessage.classList.remove('hidden');
       noDataMessage.classList.add('hidden');
@@ -292,9 +501,12 @@
       onSnapshot(sheltersQuery, (snapshot) => {
         loadingMessage.classList.add('hidden');
         shelterTableBody.innerHTML = '';
+        
+        let totalAffected = 0;
 
         if (snapshot.empty) {
           noDataMessage.classList.remove('hidden');
+          totalPopElement.textContent = "0";
           return;
         }
 
@@ -303,12 +515,23 @@
         snapshot.forEach((doc) => {
           const shelter = doc.data();
           shelter.id = doc.id;
+          
+          // Calculate Total Population
+          const male = shelter.populationMale || 0;
+          const female = shelter.populationFemale || 0;
+          const pop = (male + female) > 0 ? (male + female) : (shelter.population || 0);
+          totalAffected += pop;
+
           shelterTableBody.appendChild(createShelterRow(shelter));
         });
+
+        // Update Total Counter
+        totalPopElement.textContent = totalAffected.toLocaleString();
+
       }, (error) => {
         console.error("Fetch error:", error);
         loadingMessage.classList.remove('hidden');
-        loadingMessage.textContent = 'දත්ත ලබාගැනීම අසාර්ථක විය.';
+        loadingMessage.textContent = getText('loading_fail');
       });
     };
 
@@ -316,13 +539,13 @@
       if (!db) return;
       if (!checkPermission()) return;
 
-      if (confirm("ඔබට මෙම සහන මධ්‍යස්ථානය පද්ධතියෙන් ඉවත් කිරීමට අවශ්‍ය බව විශ්වාසද? මෙය නැවත හැරවිය නොහැක.")) {
+      if (confirm(getText('msg_confirm_delete'))) {
         try {
           await deleteDoc(doc(getSheltersCollection(), shelterId));
-          showNotification("මධ්‍යස්ථානය සාර්ථකව ඉවත් කරන ලදී.", "green");
+          showNotification(getText('msg_delete_success'), "green");
         } catch (error) {
           console.error("Delete failed:", error);
-          showNotification("දෝෂය: ඉවත් කිරීම අසාර්ථක විය.", "red");
+          showNotification(getText('msg_delete_fail'), "red");
         }
       }
     };
@@ -339,22 +562,25 @@
                 lastUpdatedBy: currentUser.uid,
                 lastUpdatedByName: currentUser.displayName || 'Editor'
             });
-            showNotification(currentStatus ? 'තහවුරු කිරීම ඉවත් කරන ලදී.' : 'ස්ථානය තහවුරු කරන ලදී.', 'green');
+            showNotification(currentStatus ? getText('msg_unverified') : getText('msg_verified'), 'green');
         } catch (e) {
             console.error(e);
-            showNotification('දෝෂයක් සිදු විය.', 'red');
+            showNotification(getText('msg_error'), 'red');
         }
     };
 
-    const getSinhalaDistrictName = (englishValue) => {
-      return sriLankanDistricts.find(d => d.value === englishValue)?.text || englishValue;
+    const getDistrictName = (englishValue) => {
+      const d = sriLankanDistricts.find(d => d.value === englishValue);
+      return d ? (currentLanguage === 'si' ? d.text_si : d.text_ta) : englishValue;
     };
 
     const formatTimestamp = (timestamp) => {
         if (!timestamp) return '-';
         try {
             const date = timestamp.toDate();
-            return date.toLocaleString('si-LK', { 
+            // Use basic toLocaleString which adapts to browser locale, but we can hint
+            const locale = currentLanguage === 'si' ? 'si-LK' : 'ta-LK';
+            return date.toLocaleString(locale, { 
                 month: 'short', 
                 day: 'numeric', 
                 hour: '2-digit', 
@@ -375,7 +601,7 @@
       // 1. District
       let cell0 = row.insertCell();
       cell0.className = 'p-4 align-top';
-      cell0.innerHTML = `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">${getSinhalaDistrictName(shelter.district)}</span>`;
+      cell0.innerHTML = `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">${getDistrictName(shelter.district)}</span>`;
 
       // 2. Address & Contacts
       let cell1 = row.insertCell();
@@ -387,7 +613,7 @@
                     ${shelter.contacts.map(c => {
                         const isGov = c.type === 'Government';
                         const badgeColor = isGov ? 'bg-purple-100 text-purple-800 border-purple-200' : 'bg-orange-100 text-orange-800 border-orange-200';
-                        const typeLabel = isGov ? 'රජයේ නිලධාරී' : 'ස්වේච්ඡා';
+                        const typeLabel = isGov ? getText('gov_officer') : getText('volunteer');
                         return `
                         <div class="flex flex-col sm:flex-row sm:items-center text-xs text-gray-600 gap-1 sm:gap-2">
                             <div class="flex items-center">
@@ -402,11 +628,11 @@
                     `}).join('')}
                 </div>`;
       } else {
-        contactHtml = `<div class="mt-2 text-xs text-gray-400 italic">සම්බන්ධතා නැත</div>`;
+        contactHtml = `<div class="mt-2 text-xs text-gray-400 italic">${getText('no_contacts')}</div>`;
       }
 
       cell1.innerHTML = `
-                <div class="text-sm font-semibold text-gray-900 leading-snug">${shelter.address || 'ලිපිනයක් නැත'}</div>
+                <div class="text-sm font-semibold text-gray-900 leading-snug">${shelter.address || getText('no_address')}</div>
                 ${contactHtml}
             `;
 
@@ -421,10 +647,10 @@
 
       cell2.innerHTML = `
           <div class="text-xl font-bold text-gray-600">${totalPop}</div>
-          <div class="text-[10px] text-gray-400 uppercase tracking-wide">එකතුව</div>
+          <div class="text-[10px] text-gray-400 uppercase tracking-wide">${getText('total')}</div>
           <div class="mt-1 flex flex-col gap-1 items-center justify-center text-[10px]">
-             <span class="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-100">පිරිමි: ${malePop}</span>
-             <span class="px-1.5 py-0.5 bg-pink-50 text-pink-700 rounded border border-pink-100">ගැහැණු: ${femalePop}</span>
+             <span class="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-100">${getText('male')}: ${malePop}</span>
+             <span class="px-1.5 py-0.5 bg-pink-50 text-pink-700 rounded border border-pink-100">${getText('female')}: ${femalePop}</span>
           </div>
       `;
 
@@ -442,7 +668,7 @@
 
         const toggleBtn = document.createElement('button');
         toggleBtn.className = `ml-2 px-2 py-1 text-[10px] font-bold uppercase tracking-wider rounded transition-colors ${isReceived ? 'bg-green-200 text-green-800 hover:bg-green-300' : 'bg-red-100 text-red-700 hover:bg-red-200'}`;
-        toggleBtn.textContent = isReceived ? 'ලැබී ඇත' : 'අවශ්‍යයි';
+        toggleBtn.textContent = isReceived ? getText('received') : getText('required');
         toggleBtn.onclick = () => toggleNeedReceived(shelter.id, index, !isReceived);
         
         toggleBtn.disabled = !isEditor();
@@ -454,7 +680,7 @@
       });
 
       if ((shelter.needs || []).length === 0) {
-        needsContainer.innerHTML = `<div class="text-xs text-gray-400 text-center py-2">අවශ්‍යතා ලැයිස්තුගත කර නැත</div>`;
+        needsContainer.innerHTML = `<div class="text-xs text-gray-400 text-center py-2">${getText('needs_empty')}</div>`;
       }
 
       needsCell.appendChild(needsContainer);
@@ -471,7 +697,7 @@
           ? `<svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`
           : `<svg class="w-4 h-4 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>`;
 
-      const verifyLabel = isVerified ? 'තහවුරු කර ඇත' : 'තහවුරු කර නැත';
+      const verifyLabel = isVerified ? getText('verified') : getText('not_verified');
 
       // Only editors can toggle
       const btnDisabled = !isEditor();
@@ -488,7 +714,7 @@
       let cellUpdate = row.insertCell();
       cellUpdate.className = 'p-4 align-top text-xs text-gray-500 w-[15%]';
       const timeToDisplay = shelter.lastUpdated || shelter.createdAt;
-      const updatedByName = shelter.lastUpdatedByName || 'නොදන්නා';
+      const updatedByName = shelter.lastUpdatedByName || getText('unknown');
 
       cellUpdate.innerHTML = `
       <div class="flex flex-col gap-1">
@@ -522,16 +748,16 @@
                 <div class="flex flex-col items-center justify-center h-full">
                     <button onclick="openEditShelterModal('${shelter.id}')" class="${btnClass}">
                         <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
-                        සංස්කරණය
+                        ${getText('edit')}
                     </button>
                     <button onclick="deleteShelter('${shelter.id}')" class="${deleteBtnClass}">
                         <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                        ඉවත් කරන්න
+                        ${getText('delete')}
                     </button>
                 </div>
             `;
       } else {
-        cellActions.innerHTML = `<span class="text-xs text-gray-400 italic">පමණක් කියවිය හැක</span>`;
+        cellActions.innerHTML = `<span class="text-xs text-gray-400 italic">${getText('read_only')}</span>`;
       }
 
       return row;
@@ -554,9 +780,9 @@
               lastUpdatedBy: currentUser.uid,
               lastUpdatedByName: currentUser.displayName || 'Editor'
           });
-          showNotification('තත්ත්වය යාවත්කාලීන විය.', 'green');
+          showNotification(getText('msg_update_success'), 'green');
         }
-      } catch (e) { showNotification('දෝෂයක්.', 'red'); }
+      } catch (e) { showNotification(getText('msg_error'), 'red'); }
     };
 
     // --- Forms ---
@@ -570,12 +796,12 @@
         div.innerHTML = `
             <div class="flex-1 space-y-2">
                 <div class="flex gap-2">
-                    <input type="text" placeholder="නම" name="contactName" value="${v1}" class="w-1/2 px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                    <input type="tel" placeholder="අංකය" name="contactPhone" required value="${v2}" class="w-1/2 px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                    <input type="text" placeholder="${getText('ph_name')}" name="contactName" value="${v1}" class="w-1/2 px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                    <input type="tel" placeholder="${getText('ph_number')}" name="contactPhone" required value="${v2}" class="w-1/2 px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none">
                 </div>
                 <select name="contactType" class="w-full px-3 py-1.5 border rounded text-xs text-gray-600 bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none">
-                    <option value="Volunteer" ${!isGov ? 'selected' : ''}>ස්වේච්ඡා (Volunteer)</option>
-                    <option value="Government" ${isGov ? 'selected' : ''}>රජයේ නිලධාරී (Gov Officer)</option>
+                    <option value="Volunteer" ${!isGov ? 'selected' : ''}>${getText('volunteer')}</option>
+                    <option value="Government" ${isGov ? 'selected' : ''}>${getText('gov_officer')}</option>
                 </select>
             </div>
             <button type="button" onclick="this.parentElement.remove()" class="w-8 h-8 flex items-center justify-center text-red-500 hover:text-red-700 bg-red-50 rounded hover:bg-red-100 transition">
@@ -584,8 +810,8 @@
         `;
       } else {
         div.innerHTML = `
-                    <input type="text" placeholder="අවශ්‍ය ද්‍රව්‍යය" name="${v2}" value="${v1}" class="flex-1 px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                    <button type="button" onclick="this.parentElement.remove()" class="w-16 text-red-500 hover:text-red-700 text-sm font-medium bg-red-50 rounded hover:bg-red-100 transition">ඉවත්</button>
+                    <input type="text" placeholder="${getText('ph_item')}" name="${v2}" value="${v1}" class="flex-1 px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                    <button type="button" onclick="this.parentElement.remove()" class="w-16 text-red-500 hover:text-red-700 text-sm font-medium bg-red-50 rounded hover:bg-red-100 transition">X</button>
                 `;
       }
       c.appendChild(div);
@@ -642,30 +868,40 @@
 
     const getNeeds = (id, name) => Array.from(document.querySelectorAll(`#${id} [name="${name}"]`)).map(i => i.value.trim()).filter(v => v);
 
+    // Helper for validation
+    const validateContacts = (contacts) => {
+        if(contacts.length === 0) {
+          showNotification(getText('msg_missing_contact'), 'red');
+          return false;
+        }
+        if (contacts.some(c => !c.phone)) {
+           showNotification(getText('msg_missing_phone'), 'red');
+           return false;
+        }
+        // Phone number validation: EXACTLY 10 digits
+        const phoneRegex = /^\d{10}$/;
+        if (contacts.some(c => !phoneRegex.test(c.phone))) {
+            showNotification(getText('msg_invalid_phone'), 'red');
+            return false;
+        }
+        return true;
+    };
+
     window.handleSubmitShelter = async (e) => {
       e.preventDefault();
-      if (!isEditor()) return showNotification('කරුණාකර පළමුව ඇතුල් වන්න.', 'red');
+      if (!isEditor()) return showNotification(getText('msg_editor_req'), 'red');
 
       const f = e.target;
       const contacts = getContacts('contact-container');
       
       // Mandatory Check: Address
       if(!f.address.value.trim()) {
-           showNotification('ලිපිනය ඇතුළත් කිරීම අනිවාර්ය වේ.', 'red');
+           showNotification(getText('msg_missing_address'), 'red');
            return;
       }
       
-      // Mandatory Check: At least one contact
-      if(contacts.length === 0) {
-          showNotification('අවම වශයෙන් එක් සම්බන්ධතා අංකයක් ඇතුළත් කිරීම අනිවාර්ය වේ.', 'red');
-          return;
-      }
-
-      // Mandatory Check: Contact Number for ALL entered contacts
-      if (contacts.some(c => !c.phone)) {
-           showNotification('සියලු සම්බන්ධතා සඳහා දුරකථන අංක ඇතුළත් කිරීම අනිවාර්ය වේ.', 'red');
-           return;
-      }
+      // Contact Validation
+      if (!validateContacts(contacts)) return;
 
       const popMale = +f.populationMale.value || 0;
       const popFemale = +f.populationFemale.value || 0;
@@ -688,35 +924,26 @@
 
       try {
         await addDoc(getSheltersCollection(), data);
-        showNotification('සාර්ථකයි!', 'green');
+        showNotification(getText('msg_update_success'), 'green');
         closeAddShelterModal();
-      } catch (err) { showNotification('දෝෂයක් සිදු විය.', 'red'); }
+      } catch (err) { showNotification(getText('msg_error'), 'red'); }
     };
 
     window.handleSubmitEditShelter = async (e) => {
       e.preventDefault();
-      if (!isEditor()) return showNotification('කරුණාකර පළමුව ඇතුල් වන්න.', 'red');
+      if (!isEditor()) return showNotification(getText('msg_editor_req'), 'red');
 
       const f = e.target;
       const contacts = getContacts('edit-contact-container');
        
       // Mandatory Check: Address
       if(!f.address.value.trim()) {
-           showNotification('ලිපිනය ඇතුළත් කිරීම අනිවාර්ය වේ.', 'red');
+           showNotification(getText('msg_missing_address'), 'red');
            return;
       }
        
-      // Mandatory Check: At least one contact
-      if(contacts.length === 0) {
-          showNotification('අවම වශයෙන් එක් සම්බන්ධතා අංකයක් ඇතුළත් කිරීම අනිවාර්ය වේ.', 'red');
-          return;
-      }
-
-      // Mandatory Check: Contact Number for ALL entered contacts
-      if (contacts.some(c => !c.phone)) {
-           showNotification('සියලු සම්බන්ධතා සඳහා දුරකථන අංක ඇතුළත් කිරීම අනිවාර්ය වේ.', 'red');
-           return;
-      }
+      // Contact Validation
+      if (!validateContacts(contacts)) return;
 
       const id = f.querySelector('#edit-shelter-id').value;
       const ref = doc(getSheltersCollection(), id);
@@ -743,9 +970,9 @@
 
       try {
         await updateDoc(ref, data);
-        showNotification('යාවත්කාලීන කරන ලදී!', 'green');
+        showNotification(getText('msg_update_success'), 'green');
         closeEditShelterModal();
-      } catch (err) { showNotification('දෝෂයක් සිදු විය.', 'red'); }
+      } catch (err) { showNotification(getText('msg_error'), 'red'); }
     };
 
     const showNotification = (msg, color) => {
@@ -797,8 +1024,16 @@
     <!-- Header -->
     <header class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
       <div>
-        <h1 class="text-3xl font-bold text-gray-900 tracking-tight">ආපදා සහන මධ්‍යස්ථාන දත්ත පුවරුව</h1>
-        <p class="text-sm text-gray-500 mt-1">Disaster Relief Centers Dashboard - Sri Lanka</p>
+        <h1 class="text-3xl font-bold text-gray-900 tracking-tight" data-i18n="title">ආපදා සහන මධ්‍යස්ථාන දත්ත පුවරුව</h1>
+        <p class="text-sm text-gray-500 mt-1" data-i18n="subtitle">Disaster Relief Centers Dashboard - Sri Lanka</p>
+        
+        <!-- Language Toggle -->
+        <div class="mt-2 text-sm">
+            Language: 
+            <button onclick="setLanguage('si')" id="btn-lang-si" class="font-bold underline text-blue-700">Sinhala</button>
+            <span class="text-gray-400 mx-1">|</span>
+            <button onclick="setLanguage('ta')" id="btn-lang-ta" class="text-gray-500 hover:text-gray-700">Tamil</button>
+        </div>
       </div>
       <div class="flex items-center gap-4">
         <!-- Auth Container -->
@@ -809,7 +1044,7 @@
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
           </svg>
-          නව මධ්‍යස්ථානයක්
+          <span data-i18n="new_shelter">නව මධ්‍යස්ථානයක්</span>
         </button>
       </div>
     </header>
@@ -824,7 +1059,7 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
         </svg>
 
-        <span class="font-semibold text-lg flex-1 text-center md:text-left px-4">උපදෙස් සහ වැදගත් දැනුම්දීම</span>
+        <span class="font-semibold text-lg flex-1 text-center md:text-left px-4" data-i18n="instructions_title">උපදෙස් සහ වැදගත් දැනුම්දීම</span>
 
         <!-- Right Arrow -->
         <svg class="toggle-icon-arrow w-5 h-5 text-blue-500 transition-transform duration-300 transform rotate-0"
@@ -835,15 +1070,15 @@
 
       <div id="instructions-content" class="collapse-transition overflow-hidden px-6 bg-white">
         <div class="py-4 space-y-3 text-sm text-gray-600">
-          <p>මෙම පද්ධතිය භාවිතා කරන ආකාරය:</p>
+          <p data-i18n="instructions_header">මෙම පද්ධතිය භාවිතා කරන ආකාරය:</p>
           <ul class="list-disc list-inside space-y-1 ml-2">
-            <li>තොරතුරු <strong>නැරඹීමට</strong> පමණක් නම් ඔබට ඇතුල් වීමට (Login) අවශ්‍ය නැත.</li>
-            <li>තොරතුරු <strong>එක් කිරීමට, සංස්කරණය කිරීමට හෝ මැකීමට</strong> Google ගිණුමක් මගින් ඇතුල් වන්න.</li>
-            <li><span class="text-red-600 font-bold bg-red-50 px-1 rounded">අවශ්‍යයි</span> - මෙම ද්‍රව්‍ය තවමත් ලැබී නොමැත, වෙනස් කිරීමට වචනය  ඔබන්න.</li>
-            <li><span class="text-green-600 font-bold bg-green-50 px-1 rounded">ලැබී ඇත</span> - මෙම ද්‍රව්‍ය ලැබී ඇත, වෙනස් කිරීමට වචනය  ඔබන්න.</li>
-            <li>මෙය පොදු ජනතාවට වෙනස් කල හැකි පද්දතියකි. පොදු ජනයාගේ උපකාරය පිණිස පවතින බැවින් වැරදි හා වංචාකාරී දත්ත ඇතුලත් කිරීමෙන් වලකින්න. සස්වේච්ඡා වෙන් සත්‍ය භාවය පරික්ෂා කිරීමට කාරුණික වන්න.</li>
+            <li data-i18n="instructions_1">තොරතුරු <strong>නැරඹීමට</strong> පමණක් නම් ඔබට ඇතුල් වීමට (Login) අවශ්‍ය නැත.</li>
+            <li data-i18n="instructions_2">තොරතුරු <strong>එක් කිරීමට, සංස්කරණය කිරීමට හෝ මැකීමට</strong> Google ගිණුමක් මගින් ඇතුල් වන්න.</li>
+            <li data-i18n="instructions_3"><span class="text-red-600 font-bold bg-red-50 px-1 rounded">අවශ්‍යයි</span> - මෙම ද්‍රව්‍ය තවමත් ලැබී නොමැත, වෙනස් කිරීමට වචනය  ඔබන්න.</li>
+            <li data-i18n="instructions_4"><span class="text-green-600 font-bold bg-green-50 px-1 rounded">ලැබී ඇත</span> - මෙම ද්‍රව්‍ය ලැබී ඇත, වෙනස් කිරීමට වචනය  ඔබන්න.</li>
+            <li data-i18n="instructions_5">මෙය පොදු ජනතාවට වෙනස් කල හැකි පද්දතියකි. පොදු ජනයාගේ උපකාරය පිණිස පවතින බැවින් වැරදි හා වංචාකාරී දත්ත ඇතුලත් කිරීමෙන් වලකින්න. සස්වේච්ඡා වෙන් සත්‍ය භාවය පරික්ෂා කිරීමට කාරුණික වන්න.</li>
           </ul>
-          <div class="bg-yellow-50 border-l-4 border-yellow-400 p-3 text-yellow-800 rounded-r text-xs mt-2">
+          <div class="bg-yellow-50 border-l-4 border-yellow-400 p-3 text-yellow-800 rounded-r text-xs mt-2" data-i18n="warning">
             <strong>අවවාදයයි:</strong> මෙය පොදු වේදිකාවකි. ආධාර රැගෙන යාමට පෙර කරුණාකර අදාළ සම්බන්ධීකාරක අමතා අවශ්‍යතාවය
             තහවුරු කරගන්න.
           </div>
@@ -851,10 +1086,10 @@
       </div>
     </div>
 
-    <!-- Filter Bar -->
+    <!-- Filter Bar & Stats -->
     <div
-      class="bg-white rounded-t-xl border-b border-gray-200 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
-      <div class="flex items-center gap-3 w-full sm:w-auto">
+      class="bg-white rounded-t-xl border-b border-gray-200 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+      <div class="flex items-center gap-3 w-full md:w-auto">
         <div class="p-2 bg-blue-100 rounded-lg text-blue-600">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -862,8 +1097,8 @@
             </path>
           </svg>
         </div>
-        <div class="flex-1 sm:flex-none">
-          <label for="district-filter"
+        <div class="flex-1 md:flex-none">
+          <label for="district-filter" data-i18n="filter_label"
             class="block text-xs font-semibold text-gray-500 uppercase tracking-wide">දිස්ත්‍රික්කය තෝරන්න</label>
           <select id="district-filter"
             class="mt-1 block w-full sm:w-64 pl-0 pr-8 py-1 border-0 border-b-2 border-gray-200 focus:ring-0 focus:border-blue-500 font-semibold text-gray-700 bg-transparent cursor-pointer transition">
@@ -871,6 +1106,18 @@
           </select>
         </div>
       </div>
+
+      <!-- Total Population Counter -->
+      <div class="flex items-center gap-3 bg-red-50 px-4 py-2 rounded-lg border border-red-100">
+        <div class="text-right">
+             <div class="text-[10px] uppercase font-bold text-red-400 tracking-wider" data-i18n="total_affected">මුළු පීඩාවට පත් ජනගහනය</div>
+             <div class="text-2xl font-bold text-red-600 leading-none" id="total-population-display">0</div>
+        </div>
+        <div class="p-2 bg-red-100 rounded-full text-red-500">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+        </div>
+      </div>
+
       <div class="text-right hidden sm:block">
         <span class="text-xs text-gray-400">Real-time Data</span>
       </div>
@@ -882,23 +1129,23 @@
         <table class="min-w-full divide-y divide-gray-200">
           <thead class="bg-gray-50">
             <tr>
-              <th scope="col"
+              <th scope="col" data-i18n="th_district"
                 class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-[12%]">
                 දිස්ත්‍රික්කය</th>
-              <th scope="col"
+              <th scope="col" data-i18n="th_address"
                 class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-[20%]">ලිපිනය &
                 සම්බන්ධතා</th>
-              <th scope="col"
+              <th scope="col" data-i18n="th_population"
                 class="px-4 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider w-[12%]">ජනගහනය
               </th>
-              <th scope="col"
+              <th scope="col" data-i18n="th_needs"
                 class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-[23%]">අවශ්‍යතා
                 ලැයිස්තුව</th>
-               <th scope="col"
+               <th scope="col" data-i18n="th_verified"
                 class="px-4 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider w-[10%]">තහවුරු කිරීම</th>
-               <th scope="col"
+               <th scope="col" data-i18n="th_updated"
                 class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-[15%]">යාවත්කාලීන වූයේ</th>
-              <th scope="col"
+              <th scope="col" data-i18n="th_actions"
                 class="px-4 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider w-[8%]">ක්‍රියා
               </th>
             </tr>
@@ -918,10 +1165,10 @@
             d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
           </path>
         </svg>
-        දත්ත පූරණය වෙමින්...
+        <span data-i18n="loading">දත්ත පූරණය වෙමින්...</span>
       </div>
       <div id="no-data-message" class="hidden p-12 text-center text-gray-400">
-        <p>තොරතුරු හමු නොවේ.</p>
+        <p data-i18n="no_data">තොරතුරු හමු නොවේ.</p>
       </div>
     </div>
   </div>
@@ -934,7 +1181,7 @@
     onclick="if(event.target === this) closeAddShelterModal()">
     <div class="bg-white w-full sm:max-w-xl sm:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col max-h-[90vh]">
       <div class="p-5 border-b flex justify-between items-center bg-gray-50 rounded-t-2xl">
-        <h3 class="text-lg font-bold text-gray-800">නව සහන මධ්‍යස්ථානයක්</h3>
+        <h3 class="text-lg font-bold text-gray-800" data-i18n="modal_add_title">නව සහන මධ්‍යස්ථානයක්</h3>
         <button onclick="closeAddShelterModal()"
           class="text-gray-400 hover:text-gray-600 bg-white p-1 rounded-full hover:bg-gray-100 transition"><svg
             class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -944,21 +1191,21 @@
       <form id="add-shelter-form" class="p-6 overflow-y-auto flex-1 space-y-5">
         <div class="grid grid-cols-2 gap-4">
           <div class="col-span-2 sm:col-span-1">
-            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">දිස්ත්‍රික්කය</label>
+            <label class="block text-xs font-bold text-gray-500 uppercase mb-1" data-i18n="label_district">දිස්ත්‍රික්කය</label>
             <select name="district" id="add-district" required
               class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm p-2.5"></select>
           </div>
           <!-- Split Population -->
           <div class="col-span-2 sm:col-span-1">
-              <label class="block text-xs font-bold text-gray-500 uppercase mb-1">ජනගහනය</label>
+              <label class="block text-xs font-bold text-gray-500 uppercase mb-1" data-i18n="th_population">ජනගහනය</label>
               <div class="flex gap-2">
                 <div class="flex-1">
-                    <label class="text-[10px] text-gray-400">පිරිමි</label>
+                    <label class="text-[10px] text-gray-400" data-i18n="label_pop_male">පිරිමි</label>
                     <input type="number" name="populationMale" min="0" value="0"
                     class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm p-2.5">
                 </div>
                 <div class="flex-1">
-                     <label class="text-[10px] text-gray-400">ගැහැණු</label>
+                     <label class="text-[10px] text-gray-400" data-i18n="label_pop_female">ගැහැණු</label>
                     <input type="number" name="populationFemale" min="0" value="0"
                     class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm p-2.5">
                 </div>
@@ -966,34 +1213,31 @@
           </div>
         </div>
         <div>
-          <label class="block text-xs font-bold text-gray-500 uppercase mb-1">ලිපිනය (අනිවාර්යයි)</label>
+          <label class="block text-xs font-bold text-gray-500 uppercase mb-1" data-i18n="label_address">ලිපිනය (අනිවාර්යයි)</label>
           <input type="text" name="address" required
             class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm p-2.5"
             placeholder="ස්ථානයේ නම සහ පාර">
         </div>
 
         <div class="border-t pt-4">
-          <label class="block text-xs font-bold text-gray-500 uppercase mb-2">සම්බන්ධතා (අවම 1ක් අනිවාර්යයි)</label>
+          <label class="block text-xs font-bold text-gray-500 uppercase mb-2" data-i18n="label_contacts">සම්බන්ධතා (අවම 1ක් අනිවාර්යයි)</label>
           <div id="contact-container" class="space-y-2"></div>
           <button type="button" onclick="window.addDynamicField('contact-container', 'contact')"
-            class="mt-2 text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1">+ අංකයක් එක්
-            කරන්න</button>
+            class="mt-2 text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1" data-i18n="btn_add_contact">+ අංකයක් එක් කරන්න</button>
         </div>
 
         <div class="border-t pt-4">
-          <label class="block text-xs font-bold text-gray-500 uppercase mb-2">අවශ්‍ය ද්‍රව්‍ය (Need List)</label>
+          <label class="block text-xs font-bold text-gray-500 uppercase mb-2" data-i18n="label_needs">අවශ්‍ය ද්‍රව්‍ය (Need List)</label>
           <div id="needs-container" class="space-y-2"></div>
           <button type="button" onclick="window.addDynamicField('needs-container', 'need', '', 'needItem')"
-            class="mt-2 text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1">+ අවශ්‍යතාවයක්
-            එක් කරන්න</button>
+            class="mt-2 text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1" data-i18n="btn_add_need">+ අවශ්‍යතාවයක් එක් කරන්න</button>
         </div>
       </form>
       <div class="p-4 border-t bg-gray-50 rounded-b-2xl flex justify-end gap-3">
         <button onclick="closeAddShelterModal()"
-          class="px-4 py-2 text-gray-600 font-medium hover:bg-gray-200 rounded-lg transition text-sm">අවලංගු
-          කරන්න</button>
+          class="px-4 py-2 text-gray-600 font-medium hover:bg-gray-200 rounded-lg transition text-sm" data-i18n="btn_cancel">අවලංගු කරන්න</button>
         <button type="submit" form="add-shelter-form"
-          class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition text-sm">සුරකින්න</button>
+          class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition text-sm" data-i18n="btn_save">සුරකින්න</button>
       </div>
     </div>
   </div>
@@ -1004,7 +1248,7 @@
     onclick="if(event.target === this) closeEditShelterModal()">
     <div class="bg-white w-full sm:max-w-xl sm:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col max-h-[90vh]">
       <div class="p-5 border-b flex justify-between items-center bg-gray-50 rounded-t-2xl">
-        <h3 class="text-lg font-bold text-gray-800">තොරතුරු සංස්කරණය</h3>
+        <h3 class="text-lg font-bold text-gray-800" data-i18n="modal_edit_title">තොරතුරු සංස්කරණය</h3>
         <button onclick="closeEditShelterModal()"
           class="text-gray-400 hover:text-gray-600 bg-white p-1 rounded-full hover:bg-gray-100 transition"><svg
             class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1015,20 +1259,20 @@
         <input type="hidden" id="edit-shelter-id">
         <div class="grid grid-cols-2 gap-4">
           <div class="col-span-2 sm:col-span-1">
-            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">දිස්ත්‍රික්කය</label>
+            <label class="block text-xs font-bold text-gray-500 uppercase mb-1" data-i18n="label_district">දිස්ත්‍රික්කය</label>
             <select name="district" id="edit-district" required
               class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-yellow-500 focus:border-yellow-500 text-sm p-2.5"></select>
           </div>
           <div class="col-span-2 sm:col-span-1">
-            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">ජනගහනය</label>
+            <label class="block text-xs font-bold text-gray-500 uppercase mb-1" data-i18n="th_population">ජනගහනය</label>
              <div class="flex gap-2">
                 <div class="flex-1">
-                    <label class="text-[10px] text-gray-400">පිරිමි</label>
+                    <label class="text-[10px] text-gray-400" data-i18n="label_pop_male">පිරිමි</label>
                     <input type="number" id="edit-population-male" name="populationMale" min="0"
                     class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-yellow-500 focus:border-yellow-500 text-sm p-2.5">
                 </div>
                 <div class="flex-1">
-                     <label class="text-[10px] text-gray-400">ගැහැණු</label>
+                     <label class="text-[10px] text-gray-400" data-i18n="label_pop_female">ගැහැණු</label>
                     <input type="number" id="edit-population-female" name="populationFemale" min="0"
                     class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-yellow-500 focus:border-yellow-500 text-sm p-2.5">
                 </div>
@@ -1036,36 +1280,31 @@
           </div>
         </div>
         <div>
-          <label class="block text-xs font-bold text-gray-500 uppercase mb-1">ලිපිනය (අනිවාර්යයි)</label>
+          <label class="block text-xs font-bold text-gray-500 uppercase mb-1" data-i18n="label_address">ලිපිනය (අනිවාර්යයි)</label>
           <input type="text" id="edit-address" name="address" required
             class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-yellow-500 focus:border-yellow-500 text-sm p-2.5">
         </div>
 
         <div class="border-t pt-4">
-          <label class="block text-xs font-bold text-gray-500 uppercase mb-2">සම්බන්ධතා (අවම 1ක් අනිවාර්යයි)</label>
+          <label class="block text-xs font-bold text-gray-500 uppercase mb-2" data-i18n="label_contacts">සම්බන්ධතා (අවම 1ක් අනිවාර්යයි)</label>
           <div id="edit-contact-container" class="space-y-2"></div>
           <button type="button" onclick="window.addDynamicField('edit-contact-container', 'contact')"
-            class="mt-2 text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1">+ අංකයක් එක්
-            කරන්න</button>
+            class="mt-2 text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1" data-i18n="btn_add_contact">+ අංකයක් එක් කරන්න</button>
         </div>
 
         <div class="border-t pt-4">
-          <label class="block text-xs font-bold text-gray-500 uppercase mb-2">අලුතින් අවශ්‍ය ද්‍රව්‍ය (New Items
-            Only)</label>
-          <p class="text-xs text-gray-400 mb-2">දැනට 'ලැබී ඇත' ලෙස සටහන් වූ ද්‍රව්‍ය මෙහි නොපෙන්වයි.</p>
+          <label class="block text-xs font-bold text-gray-500 uppercase mb-2" data-i18n="label_new_needs">අලුතින් අවශ්‍ය ද්‍රව්‍ය (New Items Only)</label>
+          <!-- <p class="text-xs text-gray-400 mb-2">දැනට 'ලැබී ඇත' ලෙස සටහන් වූ ද්‍රව්‍ය මෙහි නොපෙන්වයි.</p> -->
           <div id="edit-needs-container" class="space-y-2"></div>
           <button type="button" onclick="window.addDynamicField('edit-needs-container', 'need', '', 'editNeedItem')"
-            class="mt-2 text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1">+ අවශ්‍යතාවයක්
-            එක් කරන්න</button>
+            class="mt-2 text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1" data-i18n="btn_add_need">+ අවශ්‍යතාවයක් එක් කරන්න</button>
         </div>
       </form>
       <div class="p-4 border-t bg-gray-50 rounded-b-2xl flex justify-end gap-3">
         <button onclick="closeEditShelterModal()"
-          class="px-4 py-2 text-gray-600 font-medium hover:bg-gray-200 rounded-lg transition text-sm">අවලංගු
-          කරන්න</button>
+          class="px-4 py-2 text-gray-600 font-medium hover:bg-gray-200 rounded-lg transition text-sm" data-i18n="btn_cancel">අවලංගු කරන්න</button>
         <button type="submit" form="edit-shelter-form"
-          class="px-6 py-2 bg-yellow-500 hover:bg-yellow-600 text-white font-medium rounded-lg shadow-sm transition text-sm">යාවත්කාලීන
-          කරන්න</button>
+          class="px-6 py-2 bg-yellow-500 hover:bg-yellow-600 text-white font-medium rounded-lg shadow-sm transition text-sm" data-i18n="btn_update">යාවත්කාලීන කරන්න</button>
       </div>
     </div>
   </div>
