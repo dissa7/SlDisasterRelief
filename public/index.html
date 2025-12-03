@@ -65,7 +65,7 @@
   <!-- Firebase Imports -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, setLogLevel, getDoc, query, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     // --- FIREBASE CONFIGURATION ---
@@ -83,7 +83,7 @@
     
     let db;
     let auth;
-    let userId = null;
+    let currentUser = null; // Stores the full user object
     let isAuthReady = false;
 
     // Sri Lankan Districts
@@ -126,8 +126,9 @@
 
         populateDistrictFilters();
 
-        // AUTH LOGIC: Handle Custom Token or Fallback to Anonymous
-        // This simulates the "Logged In" state of the host version without needing Google Auth
+        // AUTH LOGIC: 
+        // 1. Try Custom Token (if provided by environment)
+        // 2. Fallback to Anonymous (default state)
         const initAuth = async () => {
           if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
              try {
@@ -135,13 +136,17 @@
                  console.log("Signed in with custom token.");
              } catch(e) {
                  console.warn("Custom token failed, falling back to anonymous", e);
-                 await signInAnonymously(auth);
              }
-          } else {
-             // If no custom token, sign in anonymously to enable functionality
-             if (!auth.currentUser) {
+          } 
+          
+          // If no user is signed in (via custom token or previous session), sign in anonymously
+          // This ensures "Anonymous can read" requirement is met immediately
+          if (!auth.currentUser) {
+             try {
                  await signInAnonymously(auth);
                  console.log("Signed in anonymously.");
+             } catch (e) {
+                 console.error("Anonymous auth failed", e);
              }
           }
         };
@@ -149,12 +154,8 @@
         await initAuth();
 
         onAuthStateChanged(auth, (user) => {
-          if (user) {
-            userId = user.uid;
-          } else {
-            userId = null;
-          }
-
+          currentUser = user;
+          
           if (!isAuthReady && db) {
             isAuthReady = true;
             const initialDistrict = document.getElementById('district-filter')?.value || 'All';
@@ -170,48 +171,88 @@
       }
     };
 
+    // --- Google Auth Functions ---
+    window.handleGoogleLogin = async () => {
+        const provider = new GoogleAuthProvider();
+        try {
+            await signInWithPopup(auth, provider);
+            showNotification('සාර්ථකව ඇතුල් විය!', 'green');
+        } catch (error) {
+            console.error("Login failed:", error);
+            showNotification('ඇතුල් වීම අසාර්ථකයි.', 'red');
+        }
+    };
+
+    window.handleLogout = async () => {
+        try {
+            await signOut(auth);
+            // After sign out, immediately sign in anonymously to keep read access
+            await signInAnonymously(auth);
+            showNotification('ඉවත් විය.', 'green');
+        } catch (error) {
+            console.error("Logout failed:", error);
+        }
+    };
+
+    const isEditor = () => {
+        return currentUser && !currentUser.isAnonymous;
+    };
+
     const updateAuthUI = () => {
       const authContainer = document.getElementById('auth-container');
       const addShelterButton = document.querySelector('[onclick="openAddShelterModal()"]');
 
-      // Status indicator - imitating a successful connection
       let statusHtml = '';
-      if (userId) {
+      
+      if (isEditor()) {
+          // Logged in via Google
           statusHtml = `
             <div class="flex items-center gap-3">
-              <span class="text-xs text-green-700 font-medium bg-green-50 px-2 py-1 rounded-full border border-green-200 flex items-center gap-1">
-                <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                සම්බන්ධිතයි
+              <span class="text-xs text-blue-700 font-medium bg-blue-50 px-2 py-1 rounded-full border border-blue-200 flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                ${currentUser.displayName || 'Editor'}
               </span>
+              <button onclick="handleLogout()" class="text-xs text-red-600 hover:text-red-800 underline">ඉවත් වන්න</button>
             </div>`;
       } else {
+           // Anonymous
            statusHtml = `
             <div class="flex items-center gap-3">
-              <span class="text-xs text-red-700 font-medium bg-red-50 px-2 py-1 rounded-full border border-red-200 flex items-center gap-1">
-                සම්බන්ධ වී නොමැත
+              <span class="text-xs text-gray-600 font-medium bg-gray-100 px-2 py-1 rounded-full border border-gray-200 flex items-center gap-1">
+                නරඹන්නා (Read Only)
               </span>
+              <button onclick="handleGoogleLogin()" class="flex items-center gap-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-xs font-semibold py-1.5 px-3 rounded shadow-sm transition">
+                <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                Google ඇතුල් වීම
+              </button>
             </div>`;
       }
       
       authContainer.innerHTML = statusHtml;
 
+      // Toggle Add Button
       if (addShelterButton) {
-        if (userId) {
+        if (isEditor()) {
             addShelterButton.disabled = false;
-            addShelterButton.classList.remove('bg-gray-400', 'cursor-not-allowed');
-            addShelterButton.classList.add('bg-blue-600', 'hover:bg-blue-700');
+            addShelterButton.classList.remove('bg-gray-300', 'cursor-not-allowed', 'opacity-50');
+            addShelterButton.classList.add('bg-blue-600', 'hover:bg-blue-700', 'text-white');
             addShelterButton.title = "නව සහන මධ්‍යස්ථානයක් එක් කරන්න";
         } else {
             addShelterButton.disabled = true;
-            addShelterButton.classList.add('bg-gray-400', 'cursor-not-allowed');
-            addShelterButton.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+            addShelterButton.classList.add('bg-gray-300', 'cursor-not-allowed', 'opacity-50');
+            addShelterButton.classList.remove('bg-blue-600', 'hover:bg-blue-700', 'text-white');
+            addShelterButton.title = "ඇතුල් වන්න";
         }
       }
+
+      // Re-render table to update action buttons state
+      const initialDistrict = document.getElementById('district-filter')?.value || 'All';
+      loadShelters(initialDistrict);
     };
 
     const checkPermission = () => {
-        if (!userId) {
-            showNotification('කරුණාකර රැඳී සිටින්න, පද්ධතියට සම්බන්ධ වෙමින් පවතී...', 'red');
+        if (!isEditor()) {
+            showNotification('සංස්කරණය කිරීම සඳහා කරුණාකර Google හරහා ඇතුල් වන්න.', 'red');
             return false;
         }
         return true;
@@ -219,7 +260,6 @@
 
     const getSheltersCollection = () => {
       if (!db) throw new Error("Firestore not initialized.");
-      // Using public data path
       return collection(db, `artifacts/${appId}/public/data/shelters`);
     };
 
@@ -258,7 +298,8 @@
 
       loadingMessage.classList.remove('hidden');
       noDataMessage.classList.add('hidden');
-      shelterTableBody.innerHTML = '';
+      // Do not clear immediately to avoid flicker if just refreshing logic
+      // shelterTableBody.innerHTML = ''; 
 
       onSnapshot(sheltersQuery, (snapshot) => {
         loadingMessage.classList.add('hidden');
@@ -279,14 +320,13 @@
       }, (error) => {
         console.error("Fetch error:", error);
         loadingMessage.classList.remove('hidden');
-        loadingMessage.textContent = 'දත්ත ලබාගැනීම අසාර්ථක විය. (Permission Error likely)';
+        loadingMessage.textContent = 'දත්ත ලබාගැනීම අසාර්ථක විය.';
       });
     };
 
     // --- Delete Operation ---
     window.deleteShelter = async (shelterId) => {
-      if (!db || !userId) return;
-      
+      if (!db) return;
       if (!checkPermission()) return;
 
       if (confirm("ඔබට මෙම සහන මධ්‍යස්ථානය පද්ධතියෙන් ඉවත් කිරීමට අවශ්‍ය බව විශ්වාසද? මෙය නැවත හැරවිය නොහැක.")) {
@@ -302,6 +342,21 @@
 
     const getSinhalaDistrictName = (englishValue) => {
       return sriLankanDistricts.find(d => d.value === englishValue)?.text || englishValue;
+    };
+
+    const formatTimestamp = (timestamp) => {
+        if (!timestamp) return '-';
+        try {
+            const date = timestamp.toDate();
+            return date.toLocaleString('si-LK', { 
+                month: 'short', 
+                day: 'numeric', 
+                hour: '2-digit', 
+                minute: '2-digit'
+            });
+        } catch (e) {
+            return '-';
+        }
     };
 
     // --- UI Generation ---
@@ -321,13 +376,23 @@
 
       let contactHtml = '';
       if (shelter.contacts && shelter.contacts.length > 0) {
-        contactHtml = `<div class="mt-2 space-y-1">
-                    ${shelter.contacts.map(c => `
-                        <div class="flex items-center text-xs text-gray-500">
-                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg>
-                            <span class="font-medium">${c.name}</span>: ${c.phone}
+        contactHtml = `<div class="mt-2 space-y-2">
+                    ${shelter.contacts.map(c => {
+                        const isGov = c.type === 'Government';
+                        const badgeColor = isGov ? 'bg-purple-100 text-purple-800 border-purple-200' : 'bg-orange-100 text-orange-800 border-orange-200';
+                        const typeLabel = isGov ? 'රජයේ නිලධාරී' : 'ස්වේච්ඡා';
+                        return `
+                        <div class="flex flex-col sm:flex-row sm:items-center text-xs text-gray-600 gap-1 sm:gap-2">
+                            <div class="flex items-center">
+                                <svg class="w-3 h-3 mr-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg>
+                                <span class="font-medium text-gray-800">${c.name}</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="">${c.phone}</span>
+                                <span class="px-1.5 py-0.5 rounded border text-[10px] ${badgeColor}">${typeLabel}</span>
+                            </div>
                         </div>
-                    `).join('')}
+                    `}).join('')}
                 </div>`;
       } else {
         contactHtml = `<div class="mt-2 text-xs text-gray-400 italic">සම්බන්ධතා නැත</div>`;
@@ -345,7 +410,7 @@
 
       // 4. Needs
       const needsCell = row.insertCell();
-      needsCell.className = 'p-4 align-top w-[35%]';
+      needsCell.className = 'p-4 align-top w-[30%]';
 
       const needsContainer = document.createElement('div');
       needsContainer.className = 'needs-list pr-2 space-y-2';
@@ -361,8 +426,11 @@
         toggleBtn.textContent = isReceived ? 'ලැබී ඇත' : 'අවශ්‍යයි';
         toggleBtn.onclick = () => toggleNeedReceived(shelter.id, index, !isReceived);
         
-        // Enable button if logged in
-        toggleBtn.disabled = !userId;
+        // Disable need toggling for anonymous users if you strictly want ONLY logged in users to edit ANYTHING
+        // However, prompt said "anonymous can read", usually implies read-only.
+        // Let's allow only Editors to toggle status
+        toggleBtn.disabled = !isEditor();
+        if(!isEditor()) toggleBtn.classList.add('opacity-60', 'cursor-not-allowed');
 
         needItem.innerHTML = `<span class="${isReceived ? 'text-gray-500 line-through' : 'text-gray-800 font-medium'}">${need.item}</span>`;
         needItem.appendChild(toggleBtn);
@@ -375,38 +443,53 @@
 
       needsCell.appendChild(needsContainer);
 
-      // 5. Actions - ENABLED for Host Functionality
+      // 5. Last Updated (NEW COLUMN)
+      let cellUpdate = row.insertCell();
+      cellUpdate.className = 'p-4 align-top text-xs text-gray-500';
+      // Use lastUpdated if available, else createdAt, else 'Unknown'
+      const timeToDisplay = shelter.lastUpdated || shelter.createdAt;
+      cellUpdate.innerHTML = `<div class="flex items-center gap-1">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        ${formatTimestamp(timeToDisplay)}
+      </div>`;
+
+
+      // 6. Actions
       let cellActions = row.insertCell();
       cellActions.className = 'p-4 align-top text-center';
       
-      // Check if user is logged in to enable/disable UI (though auth check is also on function call)
-      const btnClass = userId 
+      const editor = isEditor();
+
+      const btnClass = editor 
         ? "w-full max-w-[120px] px-3 py-1.5 bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 font-medium rounded text-xs transition shadow-sm flex items-center justify-center mb-2"
-        : "w-full max-w-[120px] px-3 py-1.5 bg-gray-100 cursor-not-allowed border border-gray-200 text-gray-400 font-medium rounded text-xs transition shadow-sm flex items-center justify-center mb-2";
+        : "hidden"; // Hide completely for anonymous
 
-      const deleteBtnClass = userId
+      const deleteBtnClass = editor
         ? "w-full max-w-[120px] px-3 py-1.5 bg-white hover:bg-red-50 border border-red-200 text-red-600 font-medium rounded text-xs transition shadow-sm flex items-center justify-center"
-        : "w-full max-w-[120px] px-3 py-1.5 bg-gray-100 cursor-not-allowed border border-gray-200 text-gray-400 font-medium rounded text-xs transition shadow-sm flex items-center justify-center";
+        : "hidden"; // Hide completely for anonymous
 
-      cellActions.innerHTML = `
+      if (editor) {
+        cellActions.innerHTML = `
                 <div class="flex flex-col items-center justify-center h-full">
-                    <button onclick="openEditShelterModal('${shelter.id}')" class="${btnClass}" ${!userId ? 'disabled' : ''}>
+                    <button onclick="openEditShelterModal('${shelter.id}')" class="${btnClass}">
                         <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
                         සංස්කරණය
                     </button>
-                    <button onclick="deleteShelter('${shelter.id}')" class="${deleteBtnClass}" ${!userId ? 'disabled' : ''}>
+                    <button onclick="deleteShelter('${shelter.id}')" class="${deleteBtnClass}">
                         <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                         ඉවත් කරන්න
                     </button>
                 </div>
             `;
+      } else {
+        cellActions.innerHTML = `<span class="text-xs text-gray-400 italic">පමණක් කියවිය හැක</span>`;
+      }
 
       return row;
     };
 
     const toggleNeedReceived = async (shelterId, needIndex, newStatus) => {
-      if (!db || !userId) return;
-      
+      if (!db) return;
       if (!checkPermission()) return;
 
       try {
@@ -416,24 +499,40 @@
         const needs = [...s.data().needs];
         if (needs[needIndex]) {
           needs[needIndex].received = newStatus;
-          await updateDoc(shelterRef, { needs });
+          await updateDoc(shelterRef, { 
+              needs,
+              lastUpdated: new Date(),
+              lastUpdatedBy: currentUser.uid
+          });
           showNotification('තත්ත්වය යාවත්කාලීන විය.', 'green');
         }
       } catch (e) { showNotification('දෝෂයක්.', 'red'); }
     };
 
     // --- Forms ---
-    window.addDynamicField = (containerId, type, v1 = '', v2 = '') => {
+    window.addDynamicField = (containerId, type, v1 = '', v2 = '', v3 = '') => {
       const c = document.getElementById(containerId);
       const div = document.createElement('div');
-      div.className = 'flex gap-2 mt-2 group';
+      div.className = 'flex gap-2 mt-2 group items-start';
 
       if (type === 'contact') {
+        // v3 is the type (Government/Volunteer)
+        const isGov = v3 === 'Government';
         div.innerHTML = `
-                    <input type="text" placeholder="නම" name="contactName" value="${v1}" class="w-[40%] px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                    <input type="tel" placeholder="අංකය" name="contactPhone" value="${v2}" class="w-[40%] px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                    <button type="button" onclick="this.parentElement.remove()" class="w-[20%] text-red-500 hover:text-red-700 text-sm font-medium bg-red-50 rounded hover:bg-red-100 transition">ඉවත්</button>
-                `;
+            <div class="flex-1 space-y-2">
+                <div class="flex gap-2">
+                    <input type="text" placeholder="නම" name="contactName" value="${v1}" class="w-1/2 px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                    <input type="tel" placeholder="අංකය" name="contactPhone" value="${v2}" class="w-1/2 px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+                <select name="contactType" class="w-full px-3 py-1.5 border rounded text-xs text-gray-600 bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none">
+                    <option value="Volunteer" ${!isGov ? 'selected' : ''}>ස්වේච්ඡා (Volunteer)</option>
+                    <option value="Government" ${isGov ? 'selected' : ''}>රජයේ නිලධාරී (Gov Officer)</option>
+                </select>
+            </div>
+            <button type="button" onclick="this.parentElement.remove()" class="w-8 h-8 flex items-center justify-center text-red-500 hover:text-red-700 bg-red-50 rounded hover:bg-red-100 transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        `;
       } else {
         div.innerHTML = `
                     <input type="text" placeholder="අවශ්‍ය ද්‍රව්‍යය" name="${v2}" value="${v1}" class="flex-1 px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none">
@@ -469,7 +568,7 @@
 
       const cc = document.getElementById('edit-contact-container');
       cc.innerHTML = '';
-      (s.contacts || []).forEach(c => window.addDynamicField('edit-contact-container', 'contact', c.name, c.phone));
+      (s.contacts || []).forEach(c => window.addDynamicField('edit-contact-container', 'contact', c.name, c.phone, c.type));
       if (!s.contacts?.length) window.addDynamicField('edit-contact-container', 'contact');
 
       const nc = document.getElementById('edit-needs-container');
@@ -486,14 +585,15 @@
     // Submit Handlers
     const getContacts = (id) => Array.from(document.querySelectorAll(`#${id} .group`)).map(d => ({
       name: d.querySelector('[name="contactName"]').value.trim(),
-      phone: d.querySelector('[name="contactPhone"]').value.trim()
+      phone: d.querySelector('[name="contactPhone"]').value.trim(),
+      type: d.querySelector('[name="contactType"]').value
     })).filter(c => c.name || c.phone);
 
     const getNeeds = (id, name) => Array.from(document.querySelectorAll(`#${id} [name="${name}"]`)).map(i => i.value.trim()).filter(v => v);
 
     window.handleSubmitShelter = async (e) => {
       e.preventDefault();
-      if (!userId) return showNotification('කරුණාකර පළමුව ඇතුල් වන්න.', 'red');
+      if (!isEditor()) return showNotification('කරුණාකර පළමුව ඇතුල් වන්න.', 'red');
 
       const f = e.target;
       const data = {
@@ -503,7 +603,8 @@
         contacts: getContacts('contact-container'),
         needs: getNeeds('needs-container', 'needItem').map(item => ({ item, received: false })),
         createdAt: new Date(),
-        createdBy: userId
+        createdBy: currentUser.uid,
+        lastUpdated: new Date()
       };
 
       try {
@@ -515,7 +616,7 @@
 
     window.handleSubmitEditShelter = async (e) => {
       e.preventDefault();
-      if (!userId) return showNotification('කරුණාකර පළමුව ඇතුල් වන්න.', 'red');
+      if (!isEditor()) return showNotification('කරුණාකර පළමුව ඇතුල් වන්න.', 'red');
 
       const f = e.target;
       const id = f.querySelector('#edit-shelter-id').value;
@@ -532,7 +633,7 @@
         contacts: getContacts('edit-contact-container'),
         needs: [...keptReceived, ...newUnreceived],
         lastUpdated: new Date(),
-        lastUpdatedBy: userId
+        lastUpdatedBy: currentUser.uid
       };
 
       try {
@@ -598,8 +699,8 @@
         <!-- Auth Container -->
         <div id="auth-container"></div>
         <button onclick="openAddShelterModal()"
-          class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg shadow-sm font-medium transition flex items-center gap-2"
-          disabled title="කරුණාකර රැඳී සිටින්න...">
+          class="bg-gray-300 cursor-not-allowed opacity-50 text-white px-5 py-2.5 rounded-lg shadow-sm font-medium transition flex items-center gap-2"
+          disabled title="ඇතුල් වන්න">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
           </svg>
@@ -629,12 +730,12 @@
 
       <div id="instructions-content" class="collapse-transition overflow-hidden px-6 bg-white">
         <div class="py-4 space-y-3 text-sm text-gray-600">
-          <p>මෙහි ඇති <strong>'අවශ්‍යතා ලැයිස්තුව'</strong> යාවත්කාලීන කිරීමෙන් අනෙක් අයට සහාය වන්න.</p>
+          <p>මෙම පද්ධතිය භාවිතා කරන ආකාරය:</p>
           <ul class="list-disc list-inside space-y-1 ml-2">
-            <li><span class="text-red-600 font-bold bg-red-50 px-1 rounded">අවශ්‍යයි</span> - මෙම ද්‍රව්‍ය තවමත් ලැබී
-              නොමැත.</li>
-            <li><span class="text-green-600 font-bold bg-green-50 px-1 rounded">ලැබී ඇත</span> - මෙම ද්‍රව්‍ය ලැබී ඇත.
-              (බොත්තම ක්ලික් කිරීමෙන් තත්ත්වය වෙනස් කළ හැක)</li>
+            <li>තොරතුරු <strong>නැරඹීමට</strong> පමණක් නම් ඔබට ඇතුල් වීමට (Login) අවශ්‍ය නැත.</li>
+            <li>තොරතුරු <strong>එක් කිරීමට, සංස්කරණය කිරීමට හෝ මැකීමට</strong> Google ගිණුමක් මගින් ඇතුල් වන්න.</li>
+            <li><span class="text-red-600 font-bold bg-red-50 px-1 rounded">අවශ්‍යයි</span> - මෙම ද්‍රව්‍ය තවමත් ලැබී නොමැත.</li>
+            <li><span class="text-green-600 font-bold bg-green-50 px-1 rounded">ලැබී ඇත</span> - මෙම ද්‍රව්‍ය ලැබී ඇත.</li>
           </ul>
           <div class="bg-yellow-50 border-l-4 border-yellow-400 p-3 text-yellow-800 rounded-r text-xs mt-2">
             <strong>අවවාදයයි:</strong> මෙය පොදු වේදිකාවකි. ආධාර රැගෙන යාමට පෙර කරුණාකර අදාළ සම්බන්ධීකාරක අමතා අවශ්‍යතාවය
@@ -665,7 +766,7 @@
         </div>
       </div>
       <div class="text-right hidden sm:block">
-        <span class="text-xs text-gray-400">Showing real-time data</span>
+        <span class="text-xs text-gray-400">Real-time Data</span>
       </div>
     </div>
 
@@ -685,10 +786,12 @@
                 class="px-4 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider w-[10%]">ජනගහනය
               </th>
               <th scope="col"
-                class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-[40%]">අවශ්‍යතා
+                class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-[30%]">අවශ්‍යතා
                 ලැයිස්තුව</th>
+               <th scope="col"
+                class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-[15%]">යාවත්කාලීන වූයේ</th>
               <th scope="col"
-                class="px-4 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider w-[15%]">ක්‍රියා
+                class="px-4 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider w-[10%]">ක්‍රියා
               </th>
             </tr>
           </thead>
@@ -715,7 +818,7 @@
     </div>
   </div>
 
-  <!-- Modals (With Fixed Height & Scroll) -->
+  <!-- Modals -->
 
   <!-- ADD Modal -->
   <div id="add-shelter-modal"
@@ -839,5 +942,4 @@
   </div>
 
 </body>
-
 </html>
