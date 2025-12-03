@@ -410,7 +410,7 @@
                 ${contactHtml}
             `;
 
-      // 3. Population (Modified)
+      // 3. Population
       let cell2 = row.insertCell();
       cell2.className = 'p-4 align-top text-center';
       
@@ -459,7 +459,7 @@
 
       needsCell.appendChild(needsContainer);
 
-      // 5. Verified Status (NEW COLUMN)
+      // 5. Verified Status
       let cellVerified = row.insertCell();
       cellVerified.className = 'p-4 align-top text-center';
       const isVerified = shelter.isVerified === true;
@@ -484,7 +484,7 @@
       `;
 
 
-      // 6. Last Updated (Modified)
+      // 6. Last Updated
       let cellUpdate = row.insertCell();
       cellUpdate.className = 'p-4 align-top text-xs text-gray-500 w-[15%]';
       const timeToDisplay = shelter.lastUpdated || shelter.createdAt;
@@ -571,7 +571,7 @@
             <div class="flex-1 space-y-2">
                 <div class="flex gap-2">
                     <input type="text" placeholder="නම" name="contactName" value="${v1}" class="w-1/2 px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                    <input type="tel" placeholder="අංකය" name="contactPhone" value="${v2}" class="w-1/2 px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                    <input type="tel" placeholder="අංකය" name="contactPhone" required value="${v2}" class="w-1/2 px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none">
                 </div>
                 <select name="contactType" class="w-full px-3 py-1.5 border rounded text-xs text-gray-600 bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none">
                     <option value="Volunteer" ${!isGov ? 'selected' : ''}>ස්වේච්ඡා (Volunteer)</option>
@@ -638,7 +638,7 @@
       name: d.querySelector('[name="contactName"]').value.trim(),
       phone: d.querySelector('[name="contactPhone"]').value.trim(),
       type: d.querySelector('[name="contactType"]').value
-    })).filter(c => c.name || c.phone);
+    })).filter(c => c.name || c.phone); // Extract rows with at least one field
 
     const getNeeds = (id, name) => Array.from(document.querySelectorAll(`#${id} [name="${name}"]`)).map(i => i.value.trim()).filter(v => v);
 
@@ -649,14 +649,21 @@
       const f = e.target;
       const contacts = getContacts('contact-container');
       
-      // Mandatory Check: Contacts
+      // Mandatory Check: Address
+      if(!f.address.value.trim()) {
+           showNotification('ලිපිනය ඇතුළත් කිරීම අනිවාර්ය වේ.', 'red');
+           return;
+      }
+      
+      // Mandatory Check: At least one contact
       if(contacts.length === 0) {
           showNotification('අවම වශයෙන් එක් සම්බන්ධතා අංකයක් ඇතුළත් කිරීම අනිවාර්ය වේ.', 'red');
           return;
       }
-      // Mandatory Check: Address
-      if(!f.address.value.trim()) {
-           showNotification('ලිපිනය ඇතුළත් කිරීම අනිවාර්ය වේ.', 'red');
+
+      // Mandatory Check: Contact Number for ALL entered contacts
+      if (contacts.some(c => !c.phone)) {
+           showNotification('සියලු සම්බන්ධතා සඳහා දුරකථන අංක ඇතුළත් කිරීම අනිවාර්ය වේ.', 'red');
            return;
       }
 
@@ -693,12 +700,21 @@
       const f = e.target;
       const contacts = getContacts('edit-contact-container');
        
+      // Mandatory Check: Address
+      if(!f.address.value.trim()) {
+           showNotification('ලිපිනය ඇතුළත් කිරීම අනිවාර්ය වේ.', 'red');
+           return;
+      }
+       
+      // Mandatory Check: At least one contact
       if(contacts.length === 0) {
           showNotification('අවම වශයෙන් එක් සම්බන්ධතා අංකයක් ඇතුළත් කිරීම අනිවාර්ය වේ.', 'red');
           return;
       }
-       if(!f.address.value.trim()) {
-           showNotification('ලිපිනය ඇතුළත් කිරීම අනිවාර්ය වේ.', 'red');
+
+      // Mandatory Check: Contact Number for ALL entered contacts
+      if (contacts.some(c => !c.phone)) {
+           showNotification('සියලු සම්බන්ධතා සඳහා දුරකථන අංක ඇතුළත් කිරීම අනිවාර්ය වේ.', 'red');
            return;
       }
 
