@@ -126,9 +126,6 @@
 
         populateDistrictFilters();
 
-        // AUTH LOGIC: 
-        // 1. Try Custom Token (if provided by environment)
-        // 2. Fallback to Anonymous (default state)
         const initAuth = async () => {
           if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
              try {
@@ -139,8 +136,6 @@
              }
           } 
           
-          // If no user is signed in (via custom token or previous session), sign in anonymously
-          // This ensures "Anonymous can read" requirement is met immediately
           if (!auth.currentUser) {
              try {
                  await signInAnonymously(auth);
@@ -186,7 +181,6 @@
     window.handleLogout = async () => {
         try {
             await signOut(auth);
-            // After sign out, immediately sign in anonymously to keep read access
             await signInAnonymously(auth);
             showNotification('ඉවත් විය.', 'green');
         } catch (error) {
@@ -205,7 +199,6 @@
       let statusHtml = '';
       
       if (isEditor()) {
-          // Logged in via Google
           statusHtml = `
             <div class="flex items-center gap-3">
               <span class="text-xs text-blue-700 font-medium bg-blue-50 px-2 py-1 rounded-full border border-blue-200 flex items-center gap-1">
@@ -215,7 +208,6 @@
               <button onclick="handleLogout()" class="text-xs text-red-600 hover:text-red-800 underline">ඉවත් වන්න</button>
             </div>`;
       } else {
-           // Anonymous
            statusHtml = `
             <div class="flex items-center gap-3">
               <span class="text-xs text-gray-600 font-medium bg-gray-100 px-2 py-1 rounded-full border border-gray-200 flex items-center gap-1">
@@ -230,7 +222,6 @@
       
       authContainer.innerHTML = statusHtml;
 
-      // Toggle Add Button
       if (addShelterButton) {
         if (isEditor()) {
             addShelterButton.disabled = false;
@@ -245,7 +236,6 @@
         }
       }
 
-      // Re-render table to update action buttons state
       const initialDistrict = document.getElementById('district-filter')?.value || 'All';
       loadShelters(initialDistrict);
     };
@@ -298,8 +288,6 @@
 
       loadingMessage.classList.remove('hidden');
       noDataMessage.classList.add('hidden');
-      // Do not clear immediately to avoid flicker if just refreshing logic
-      // shelterTableBody.innerHTML = ''; 
 
       onSnapshot(sheltersQuery, (snapshot) => {
         loadingMessage.classList.add('hidden');
@@ -324,7 +312,6 @@
       });
     };
 
-    // --- Delete Operation ---
     window.deleteShelter = async (shelterId) => {
       if (!db) return;
       if (!checkPermission()) return;
@@ -340,6 +327,25 @@
       }
     };
 
+    window.toggleVerification = async (shelterId, currentStatus) => {
+        if (!db) return;
+        if (!checkPermission()) return;
+
+        try {
+            const shelterRef = doc(getSheltersCollection(), shelterId);
+            await updateDoc(shelterRef, { 
+                isVerified: !currentStatus,
+                lastUpdated: new Date(),
+                lastUpdatedBy: currentUser.uid,
+                lastUpdatedByName: currentUser.displayName || 'Editor'
+            });
+            showNotification(currentStatus ? 'තහවුරු කිරීම ඉවත් කරන ලදී.' : 'ස්ථානය තහවුරු කරන ලදී.', 'green');
+        } catch (e) {
+            console.error(e);
+            showNotification('දෝෂයක් සිදු විය.', 'red');
+        }
+    };
+
     const getSinhalaDistrictName = (englishValue) => {
       return sriLankanDistricts.find(d => d.value === englishValue)?.text || englishValue;
     };
@@ -352,7 +358,8 @@
                 month: 'short', 
                 day: 'numeric', 
                 hour: '2-digit', 
-                minute: '2-digit'
+                minute: '2-digit',
+                second: '2-digit'
             });
         } catch (e) {
             return '-';
@@ -403,10 +410,23 @@
                 ${contactHtml}
             `;
 
-      // 3. Population
+      // 3. Population (Modified)
       let cell2 = row.insertCell();
       cell2.className = 'p-4 align-top text-center';
-      cell2.innerHTML = `<div class="text-xl font-bold text-gray-600">${shelter.population || 0}</div><div class="text-[10px] text-gray-400 uppercase tracking-wide">ජනගහනය</div>`;
+      
+      const malePop = shelter.populationMale || 0;
+      const femalePop = shelter.populationFemale || 0;
+      // If legacy 'population' exists and separate counts are 0, use legacy
+      const totalPop = (malePop + femalePop) > 0 ? (malePop + femalePop) : (shelter.population || 0);
+
+      cell2.innerHTML = `
+          <div class="text-xl font-bold text-gray-600">${totalPop}</div>
+          <div class="text-[10px] text-gray-400 uppercase tracking-wide">එකතුව</div>
+          <div class="mt-1 flex flex-col gap-1 items-center justify-center text-[10px]">
+             <span class="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-100">පිරිමි: ${malePop}</span>
+             <span class="px-1.5 py-0.5 bg-pink-50 text-pink-700 rounded border border-pink-100">ගැහැණු: ${femalePop}</span>
+          </div>
+      `;
 
       // 4. Needs
       const needsCell = row.insertCell();
@@ -420,15 +440,11 @@
         const needItem = document.createElement('div');
         needItem.className = `flex justify-between items-center text-sm p-2 rounded border ${isReceived ? 'bg-green-50 border-green-100' : 'bg-white border-gray-200 shadow-sm'}`;
 
-        // Toggle Button Logic
         const toggleBtn = document.createElement('button');
         toggleBtn.className = `ml-2 px-2 py-1 text-[10px] font-bold uppercase tracking-wider rounded transition-colors ${isReceived ? 'bg-green-200 text-green-800 hover:bg-green-300' : 'bg-red-100 text-red-700 hover:bg-red-200'}`;
         toggleBtn.textContent = isReceived ? 'ලැබී ඇත' : 'අවශ්‍යයි';
         toggleBtn.onclick = () => toggleNeedReceived(shelter.id, index, !isReceived);
         
-        // Disable need toggling for anonymous users if you strictly want ONLY logged in users to edit ANYTHING
-        // However, prompt said "anonymous can read", usually implies read-only.
-        // Let's allow only Editors to toggle status
         toggleBtn.disabled = !isEditor();
         if(!isEditor()) toggleBtn.classList.add('opacity-60', 'cursor-not-allowed');
 
@@ -443,30 +459,63 @@
 
       needsCell.appendChild(needsContainer);
 
-      // 5. Last Updated (NEW COLUMN)
+      // 5. Verified Status (NEW COLUMN)
+      let cellVerified = row.insertCell();
+      cellVerified.className = 'p-4 align-top text-center';
+      const isVerified = shelter.isVerified === true;
+      const verifyBtnClass = isVerified 
+          ? 'bg-green-100 text-green-800 border-green-200' 
+          : 'bg-yellow-50 text-yellow-700 border-yellow-200';
+      
+      const verifyIcon = isVerified
+          ? `<svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`
+          : `<svg class="w-4 h-4 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>`;
+
+      const verifyLabel = isVerified ? 'තහවුරු කර ඇත' : 'තහවුරු කර නැත';
+
+      // Only editors can toggle
+      const btnDisabled = !isEditor();
+      
+      cellVerified.innerHTML = `
+        <button ${btnDisabled ? 'disabled' : ''} onclick="toggleVerification('${shelter.id}', ${isVerified})" class="flex flex-col items-center gap-1 w-full px-2 py-1.5 rounded border ${verifyBtnClass} ${btnDisabled ? 'opacity-70 cursor-not-allowed' : 'hover:shadow-sm cursor-pointer transition'}">
+            ${verifyIcon}
+            <span class="text-[10px] font-bold">${verifyLabel}</span>
+        </button>
+      `;
+
+
+      // 6. Last Updated (Modified)
       let cellUpdate = row.insertCell();
-      cellUpdate.className = 'p-4 align-top text-xs text-gray-500';
-      // Use lastUpdated if available, else createdAt, else 'Unknown'
+      cellUpdate.className = 'p-4 align-top text-xs text-gray-500 w-[15%]';
       const timeToDisplay = shelter.lastUpdated || shelter.createdAt;
-      cellUpdate.innerHTML = `<div class="flex items-center gap-1">
-        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-        ${formatTimestamp(timeToDisplay)}
+      const updatedByName = shelter.lastUpdatedByName || 'නොදන්නා';
+
+      cellUpdate.innerHTML = `
+      <div class="flex flex-col gap-1">
+        <div class="flex items-center gap-1 font-medium text-gray-700">
+             <svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            ${formatTimestamp(timeToDisplay)}
+        </div>
+        <div class="text-[10px] text-gray-400 flex items-center gap-1 ml-4">
+             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+             ${updatedByName}
+        </div>
       </div>`;
 
 
-      // 6. Actions
+      // 7. Actions
       let cellActions = row.insertCell();
-      cellActions.className = 'p-4 align-top text-center';
+      cellActions.className = 'p-4 align-top text-center w-[10%]';
       
       const editor = isEditor();
 
       const btnClass = editor 
         ? "w-full max-w-[120px] px-3 py-1.5 bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 font-medium rounded text-xs transition shadow-sm flex items-center justify-center mb-2"
-        : "hidden"; // Hide completely for anonymous
+        : "hidden"; 
 
       const deleteBtnClass = editor
         ? "w-full max-w-[120px] px-3 py-1.5 bg-white hover:bg-red-50 border border-red-200 text-red-600 font-medium rounded text-xs transition shadow-sm flex items-center justify-center"
-        : "hidden"; // Hide completely for anonymous
+        : "hidden";
 
       if (editor) {
         cellActions.innerHTML = `
@@ -502,7 +551,8 @@
           await updateDoc(shelterRef, { 
               needs,
               lastUpdated: new Date(),
-              lastUpdatedBy: currentUser.uid
+              lastUpdatedBy: currentUser.uid,
+              lastUpdatedByName: currentUser.displayName || 'Editor'
           });
           showNotification('තත්ත්වය යාවත්කාලීන විය.', 'green');
         }
@@ -516,7 +566,6 @@
       div.className = 'flex gap-2 mt-2 group items-start';
 
       if (type === 'contact') {
-        // v3 is the type (Government/Volunteer)
         const isGov = v3 === 'Government';
         div.innerHTML = `
             <div class="flex-1 space-y-2">
@@ -564,7 +613,10 @@
       f.querySelector('#edit-shelter-id').value = id;
       f.querySelector('#edit-district').value = s.district;
       f.querySelector('#edit-address').value = s.address;
-      f.querySelector('#edit-population').value = s.population;
+      
+      // Load split population
+      f.querySelector('#edit-population-male').value = s.populationMale || 0;
+      f.querySelector('#edit-population-female').value = s.populationFemale || 0;
 
       const cc = document.getElementById('edit-contact-container');
       cc.innerHTML = '';
@@ -573,7 +625,6 @@
 
       const nc = document.getElementById('edit-needs-container');
       nc.innerHTML = '';
-      // Only unreceived in edit
       const unreceived = (s.needs || []).filter(n => !n.received);
       unreceived.forEach(n => window.addDynamicField('edit-needs-container', 'need', n.item, 'editNeedItem'));
       if (!unreceived.length) window.addDynamicField('edit-needs-container', 'need', '', 'editNeedItem');
@@ -596,15 +647,36 @@
       if (!isEditor()) return showNotification('කරුණාකර පළමුව ඇතුල් වන්න.', 'red');
 
       const f = e.target;
+      const contacts = getContacts('contact-container');
+      
+      // Mandatory Check: Contacts
+      if(contacts.length === 0) {
+          showNotification('අවම වශයෙන් එක් සම්බන්ධතා අංකයක් ඇතුළත් කිරීම අනිවාර්ය වේ.', 'red');
+          return;
+      }
+      // Mandatory Check: Address
+      if(!f.address.value.trim()) {
+           showNotification('ලිපිනය ඇතුළත් කිරීම අනිවාර්ය වේ.', 'red');
+           return;
+      }
+
+      const popMale = +f.populationMale.value || 0;
+      const popFemale = +f.populationFemale.value || 0;
+
       const data = {
         district: f.district.value,
         address: f.address.value.trim(),
-        population: +f.population.value,
-        contacts: getContacts('contact-container'),
+        populationMale: popMale,
+        populationFemale: popFemale,
+        population: popMale + popFemale, // Total for fallback
+        contacts: contacts,
         needs: getNeeds('needs-container', 'needItem').map(item => ({ item, received: false })),
         createdAt: new Date(),
         createdBy: currentUser.uid,
-        lastUpdated: new Date()
+        lastUpdated: new Date(),
+        lastUpdatedBy: currentUser.uid,
+        lastUpdatedByName: currentUser.displayName || 'Editor',
+        isVerified: false // Default to not verified
       };
 
       try {
@@ -619,6 +691,17 @@
       if (!isEditor()) return showNotification('කරුණාකර පළමුව ඇතුල් වන්න.', 'red');
 
       const f = e.target;
+      const contacts = getContacts('edit-contact-container');
+       
+      if(contacts.length === 0) {
+          showNotification('අවම වශයෙන් එක් සම්බන්ධතා අංකයක් ඇතුළත් කිරීම අනිවාර්ය වේ.', 'red');
+          return;
+      }
+       if(!f.address.value.trim()) {
+           showNotification('ලිපිනය ඇතුළත් කිරීම අනිවාර්ය වේ.', 'red');
+           return;
+      }
+
       const id = f.querySelector('#edit-shelter-id').value;
       const ref = doc(getSheltersCollection(), id);
       const oldData = (await getDoc(ref)).data();
@@ -626,14 +709,20 @@
       const newUnreceived = getNeeds('edit-needs-container', 'editNeedItem').map(item => ({ item, received: false }));
       const keptReceived = (oldData.needs || []).filter(n => n.received);
 
+      const popMale = +f.querySelector('#edit-population-male').value || 0;
+      const popFemale = +f.querySelector('#edit-population-female').value || 0;
+
       const data = {
         district: f.district.value,
         address: f.address.value.trim(),
-        population: +f.population.value,
-        contacts: getContacts('edit-contact-container'),
+        populationMale: popMale,
+        populationFemale: popFemale,
+        population: popMale + popFemale,
+        contacts: contacts,
         needs: [...keptReceived, ...newUnreceived],
         lastUpdated: new Date(),
-        lastUpdatedBy: currentUser.uid
+        lastUpdatedBy: currentUser.uid,
+        lastUpdatedByName: currentUser.displayName || 'Editor'
       };
 
       try {
@@ -659,11 +748,11 @@
       if (c.style.maxHeight && c.style.maxHeight !== '0px') {
         c.style.maxHeight = '0px';
         c.style.opacity = '0';
-        icons.forEach(i => i.style.transform = 'rotate(-90deg)'); // Point right/inward
+        icons.forEach(i => i.style.transform = 'rotate(-90deg)'); 
       } else {
         c.style.maxHeight = c.scrollHeight + "px";
         c.style.opacity = '1';
-        icons.forEach(i => i.style.transform = 'rotate(0deg)'); // Point down
+        icons.forEach(i => i.style.transform = 'rotate(0deg)');
       }
     };
     const initializeInstructionsHeight = () => {
@@ -734,8 +823,9 @@
           <ul class="list-disc list-inside space-y-1 ml-2">
             <li>තොරතුරු <strong>නැරඹීමට</strong> පමණක් නම් ඔබට ඇතුල් වීමට (Login) අවශ්‍ය නැත.</li>
             <li>තොරතුරු <strong>එක් කිරීමට, සංස්කරණය කිරීමට හෝ මැකීමට</strong> Google ගිණුමක් මගින් ඇතුල් වන්න.</li>
-            <li><span class="text-red-600 font-bold bg-red-50 px-1 rounded">අවශ්‍යයි</span> - මෙම ද්‍රව්‍ය තවමත් ලැබී නොමැත.</li>
-            <li><span class="text-green-600 font-bold bg-green-50 px-1 rounded">ලැබී ඇත</span> - මෙම ද්‍රව්‍ය ලැබී ඇත.</li>
+            <li><span class="text-red-600 font-bold bg-red-50 px-1 rounded">අවශ්‍යයි</span> - මෙම ද්‍රව්‍ය තවමත් ලැබී නොමැත, වෙනස් කිරීමට වචනය  ඔබන්න.</li>
+            <li><span class="text-green-600 font-bold bg-green-50 px-1 rounded">ලැබී ඇත</span> - මෙම ද්‍රව්‍ය ලැබී ඇත, වෙනස් කිරීමට වචනය  ඔබන්න.</li>
+            <li>මෙය පොදු ජනතාවට වෙනස් කල හැකි පද්දතියකි. පොදු ජනයාගේ උපකාරය පිණිස පවතින බැවින් වැරදි හා වංචාකාරී දත්ත ඇතුලත් කිරීමෙන් වලකින්න. සස්වේච්ඡා වෙන් සත්‍ය භාවය පරික්ෂා කිරීමට කාරුණික වන්න.</li>
           </ul>
           <div class="bg-yellow-50 border-l-4 border-yellow-400 p-3 text-yellow-800 rounded-r text-xs mt-2">
             <strong>අවවාදයයි:</strong> මෙය පොදු වේදිකාවකි. ආධාර රැගෙන යාමට පෙර කරුණාකර අදාළ සම්බන්ධීකාරක අමතා අවශ්‍යතාවය
@@ -780,18 +870,20 @@
                 class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-[12%]">
                 දිස්ත්‍රික්කය</th>
               <th scope="col"
-                class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-[23%]">ලිපිනය &
+                class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-[20%]">ලිපිනය &
                 සම්බන්ධතා</th>
               <th scope="col"
-                class="px-4 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider w-[10%]">ජනගහනය
+                class="px-4 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider w-[12%]">ජනගහනය
               </th>
               <th scope="col"
-                class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-[30%]">අවශ්‍යතා
+                class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-[23%]">අවශ්‍යතා
                 ලැයිස්තුව</th>
+               <th scope="col"
+                class="px-4 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider w-[10%]">තහවුරු කිරීම</th>
                <th scope="col"
                 class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-[15%]">යාවත්කාලීන වූයේ</th>
               <th scope="col"
-                class="px-4 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider w-[10%]">ක්‍රියා
+                class="px-4 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider w-[8%]">ක්‍රියා
               </th>
             </tr>
           </thead>
@@ -840,21 +932,32 @@
             <select name="district" id="add-district" required
               class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm p-2.5"></select>
           </div>
+          <!-- Split Population -->
           <div class="col-span-2 sm:col-span-1">
-            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">ජනගහනය</label>
-            <input type="number" name="population" required min="1" value="1"
-              class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm p-2.5">
+              <label class="block text-xs font-bold text-gray-500 uppercase mb-1">ජනගහනය</label>
+              <div class="flex gap-2">
+                <div class="flex-1">
+                    <label class="text-[10px] text-gray-400">පිරිමි</label>
+                    <input type="number" name="populationMale" min="0" value="0"
+                    class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm p-2.5">
+                </div>
+                <div class="flex-1">
+                     <label class="text-[10px] text-gray-400">ගැහැණු</label>
+                    <input type="number" name="populationFemale" min="0" value="0"
+                    class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm p-2.5">
+                </div>
+              </div>
           </div>
         </div>
         <div>
-          <label class="block text-xs font-bold text-gray-500 uppercase mb-1">ලිපිනය</label>
+          <label class="block text-xs font-bold text-gray-500 uppercase mb-1">ලිපිනය (අනිවාර්යයි)</label>
           <input type="text" name="address" required
             class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm p-2.5"
             placeholder="ස්ථානයේ නම සහ පාර">
         </div>
 
         <div class="border-t pt-4">
-          <label class="block text-xs font-bold text-gray-500 uppercase mb-2">සම්බන්ධතා</label>
+          <label class="block text-xs font-bold text-gray-500 uppercase mb-2">සම්බන්ධතා (අවම 1ක් අනිවාර්යයි)</label>
           <div id="contact-container" class="space-y-2"></div>
           <button type="button" onclick="window.addDynamicField('contact-container', 'contact')"
             class="mt-2 text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1">+ අංකයක් එක්
@@ -902,18 +1005,28 @@
           </div>
           <div class="col-span-2 sm:col-span-1">
             <label class="block text-xs font-bold text-gray-500 uppercase mb-1">ජනගහනය</label>
-            <input type="number" id="edit-population" name="population" required min="1"
-              class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-yellow-500 focus:border-yellow-500 text-sm p-2.5">
+             <div class="flex gap-2">
+                <div class="flex-1">
+                    <label class="text-[10px] text-gray-400">පිරිමි</label>
+                    <input type="number" id="edit-population-male" name="populationMale" min="0"
+                    class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-yellow-500 focus:border-yellow-500 text-sm p-2.5">
+                </div>
+                <div class="flex-1">
+                     <label class="text-[10px] text-gray-400">ගැහැණු</label>
+                    <input type="number" id="edit-population-female" name="populationFemale" min="0"
+                    class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-yellow-500 focus:border-yellow-500 text-sm p-2.5">
+                </div>
+              </div>
           </div>
         </div>
         <div>
-          <label class="block text-xs font-bold text-gray-500 uppercase mb-1">ලිපිනය</label>
+          <label class="block text-xs font-bold text-gray-500 uppercase mb-1">ලිපිනය (අනිවාර්යයි)</label>
           <input type="text" id="edit-address" name="address" required
             class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-yellow-500 focus:border-yellow-500 text-sm p-2.5">
         </div>
 
         <div class="border-t pt-4">
-          <label class="block text-xs font-bold text-gray-500 uppercase mb-2">සම්බන්ධතා</label>
+          <label class="block text-xs font-bold text-gray-500 uppercase mb-2">සම්බන්ධතා (අවම 1ක් අනිවාර්යයි)</label>
           <div id="edit-contact-container" class="space-y-2"></div>
           <button type="button" onclick="window.addDynamicField('edit-contact-container', 'contact')"
             class="mt-2 text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1">+ අංකයක් එක්
