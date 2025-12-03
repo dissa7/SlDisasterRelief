@@ -107,13 +107,13 @@
         filter_label: "දිස්ත්‍රික්කය තෝරන්න",
         all_districts: "සියලුම දිස්ත්‍රික්ක පෙන්වන්න",
         select_district_placeholder: "-- දිස්ත්‍රික්කය තෝරන්න --",
-        total_affected: "මුළු පීඩාවට පත් ජනගහනය",
+        total_affected: "කදවරු තුල මුළු ජනගහනය",
         th_district: "දිස්ත්‍රික්කය",
         th_address: "ලිපිනය & සම්බන්ධතා",
         th_population: "ජනගහනය",
         th_needs: "අවශ්‍යතා ලැයිස්තුව",
         th_verified: "තහවුරු කිරීම",
-        th_updated: "යාවත්කාලීන වූයේ",
+        th_updated: "අවසන් වරට යාවත්කාලීන වූයේ",
         th_actions: "ක්‍රියා",
         loading: "දත්ත පූරණය වෙමින්...",
         no_data: "තොරතුරු හමු නොවේ.",
@@ -131,7 +131,7 @@
         volunteer: "ස්වේච්ඡා",
         edit: "සංස්කරණය",
         delete: "ඉවත් කරන්න",
-        read_only: "පමණක් කියවිය හැක",
+        read_only: "කියවීම පමණක් හැක",
         modal_add_title: "නව සහන මධ්‍යස්ථානයක්",
         modal_edit_title: "තොරතුරු සංස්කරණය",
         label_district: "දිස්ත්‍රික්කය",
@@ -978,7 +978,7 @@
     const showNotification = (msg, color) => {
       const n = document.getElementById('notification-box');
       n.textContent = msg;
-      n.className = `fixed bottom-5 right-5 px-6 py-3 rounded shadow-lg text-white font-medium z-50 transform transition-all duration-300 ${color === 'red' ? 'bg-red-500' : 'bg-green-600'}`;
+      n.className = `fixed bottom-5 right-5 px-6 py-3 rounded shadow-lg text-white font-medium z-[100] transform transition-all duration-300 ${color === 'red' ? 'bg-red-500' : 'bg-green-600'}`;
       n.classList.remove('translate-y-20', 'opacity-0');
       setTimeout(() => n.classList.add('translate-y-20', 'opacity-0'), 3000);
     };
