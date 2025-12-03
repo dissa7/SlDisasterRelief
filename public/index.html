@@ -86,6 +86,7 @@
     let currentUser = null; // Stores the full user object
     let isAuthReady = false;
     let currentLanguage = 'si'; // Default Language
+    let unsubscribeShelters = null; // To track and cancel active listeners
 
     // --- TRANSLATIONS ---
     const i18n = {
@@ -313,8 +314,8 @@
           
           if (!isAuthReady && db) {
             isAuthReady = true;
-            const initialDistrict = document.getElementById('district-filter')?.value || 'All';
-            loadShelters(initialDistrict);
+            // Note: We don't call loadShelters here anymore to avoid double-loading.
+            // updateAuthUI calls it immediately after.
             initializeInstructionsHeight();
           }
           updateAuthUI();
@@ -436,9 +437,9 @@
         }
       }
 
-      // Refresh rows for actions text
-      // const initialDistrict = document.getElementById('district-filter')?.value || 'All';
-      // loadShelters(initialDistrict);
+      // Refresh rows for actions text (Crucial for enabling Edit/Delete)
+      const initialDistrict = document.getElementById('district-filter')?.value || 'All';
+      loadShelters(initialDistrict);
     };
 
     const checkPermission = () => {
@@ -485,6 +486,11 @@
     const loadShelters = (districtFilter) => {
       if (!isAuthReady || !db) return;
 
+      // Clean up previous listeners to prevent double-loading
+      if (unsubscribeShelters) {
+        unsubscribeShelters();
+      }
+
       const sheltersRef = getSheltersCollection();
       let sheltersQuery = districtFilter && districtFilter !== 'All'
         ? query(sheltersRef, where('district', '==', districtFilter))
@@ -498,7 +504,7 @@
       loadingMessage.classList.remove('hidden');
       noDataMessage.classList.add('hidden');
 
-      onSnapshot(sheltersQuery, (snapshot) => {
+      unsubscribeShelters = onSnapshot(sheltersQuery, (snapshot) => {
         loadingMessage.classList.add('hidden');
         shelterTableBody.innerHTML = '';
         
